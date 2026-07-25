@@ -1,0 +1,23 @@
+  :root{
+    --navy:#16233f;
+    --navy-deep:#0e1730;
+    --gold:#b8912f;
+    --gold-light:#d8b45c;
+    --cream:#ede4d3;
+    --ink:#c0392b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--navy-deep);color:var(--cream);
+    font-family:"Yu Mincho","YuMincho","Hiragino Mincho ProN",serif;}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:10px;gap:8px;overflow:hidden;}
+  header{text-align:center;line-height:1.2}
+  header .ttl{font-size:clamp(17px,5vw,22px);letter-spacing:.14em;}
+  header .sub{margin-top:4px;font-size:10px;letter-spacing:.28em;color:var(--gold-light);
+    font-family:system-ui,sans-serif;}
+  #wrap{position:relative;width:min(100%,420px);}
+  canvas{display:block;width:100%;height:auto;border:1px solid rgba(184,145,47,.55);
+    background:var(--navy);touch-action:none;}
+  .hint{font-size:11px;letter-spacing:.06em;color:rgba(237,228,211,.6);
+    font-family:system-ui,sans-serif;text-align:center;}
+  #fire{position:absolute;inset:auto 0 0 0;height:0;}
