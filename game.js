@@ -68,6 +68,7 @@ let wave = 1, score = 0, lives = 3;
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let midDone = false;   // 中ボスを倒したか
+let introT = 0, introMax = 0, introBlots = [];   // ラスボス登場演出
 let dir = 1, stepTimer = 0, shake = 0;
 let ki = 0, charge = 0, beam = null, kbCharge = false, frame = 0, flash = 0;
 let items = [];
@@ -152,7 +153,7 @@ function bossDown(){
 }
 
 function reset(){
-  wave = 1; score = 0; lives = 3; midDone = false;
+  wave = 1; score = 0; lives = 3; midDone = false; introT = 0;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　申請書類の群れ', 90);
@@ -401,6 +402,7 @@ function update(){
   if(shake > 0) shake--;
   if(flash > 0) flash--;
   if(state !== 'play') return;
+  if(introT > 0){ updateIntro(); return; }   // ラスボス登場演出（インクブリード）中は進行停止
 
   // 気力：時間で少し、書類を捌くと多く回復
   ki = Math.min(100, ki + .05);
@@ -474,8 +476,7 @@ function updateSwarm(){
       beep(200,.5,'sawtooth',.06); bgmSet('boss', true); return;
     }
     if(wave >= 5){
-      makeBoss('last'); setMsg('最終面　所長が出てきた', 120);
-      beep(200,.5,'sawtooth',.06); bgmSet('boss', true); return;
+      startBossIntro(); return;   // ラスボス登場演出（インクブリード）
     }
     wave++; makeWave(wave); player.inv = 60;
     const kanji = ['', '一', '二', '三', '四', '五'][wave] || wave;
@@ -635,6 +636,68 @@ function updateMidBoss(b){
     }
   }
   bullets = bullets.filter(bl => !bl.dead);
+}
+
+/* ---------- ラスボス登場演出（インクブリード） ---------- */
+function startBossIntro(){
+  introMax = introT = 155;
+  bullets = []; ebullets = []; missiles = []; items = []; charge = 0; beam = null;
+  // 画面中央（印の落下点）から外へ滲み出す朱墨のブロット
+  introBlots = [];
+  for(let i=0;i<20;i++){
+    const ang = Math.random()*6.283, dist = Math.random()*Math.max(W, H)*.62;
+    introBlots.push({
+      x: W/2 + Math.cos(ang)*dist, y: H*0.40 + Math.sin(ang)*dist,
+      r: 5 + Math.random()*13, delay: 46 + dist*0.28 + Math.random()*12
+    });
+  }
+  setMsg('', 0); beep(320, .5, 'sine', .04);
+}
+function updateIntro(){
+  introT--;
+  const t = introMax - introT;
+  if(t === 46){ shake = 16; flash = 8; bgmSet('boss', true);     // 認印が振り下ろされる
+                beep(140, .5, 'sawtooth', .07); beep(90, .6, 'square', .05); }
+  if(introT === 24){ makeBoss('last'); shake = 12; }             // 墨の中からラスボス出現
+  if(introT <= 0){ setMsg('最終面　所長 参上', 120); beep(200, .5, 'sawtooth', .06); }
+}
+function drawIntro(){
+  const t = introMax - introT;
+  const fade = introT < 24 ? introT/24 : 1;   // 終盤は墨が引いてラスボスが現れる
+  ctx.save();
+  // 朱墨のにじみ（ブロットが成長して画面を侵食）
+  for(const b of introBlots){
+    const lt = t - b.delay;
+    if(lt <= 0) continue;
+    const gr = b.r + lt * 2.5;
+    ctx.globalAlpha = Math.min(1, lt/30) * fade;
+    ctx.fillStyle = '#4e0a0c'; ctx.beginPath(); ctx.arc(b.x, b.y, gr, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#8f181a'; ctx.beginPath(); ctx.arc(b.x, b.y, gr*.62, 0, 6.283); ctx.fill();
+  }
+  // 全体の墨染め
+  ctx.globalAlpha = Math.min(.5, Math.max(0, (t-46)/80)) * fade;
+  ctx.fillStyle = '#340608'; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+  // 認印の落下（大きく→原寸で着地）
+  if(t >= 30){
+    const land = Math.min(1, (t-30)/16), sc = 2.7 - 1.7*land;
+    ctx.save();
+    ctx.translate(W/2, H*0.40); ctx.globalAlpha = land * fade; ctx.scale(sc, sc);
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(-30, -30, 60, 60);
+    ctx.strokeStyle = '#5a0b0d'; ctx.lineWidth = 3; ctx.strokeRect(-30, -30, 60, 60);
+    ctx.fillStyle = '#ede4d3'; ctx.font = '40px "Yu Mincho",serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('認', 0, 2);
+    ctx.restore();
+  }
+  // 決戦テキスト
+  if(t >= 74){
+    ctx.globalAlpha = Math.min(1, (t-74)/16) * fade;
+    ctx.fillStyle = '#ede4d3'; ctx.font = '19px "Yu Mincho",serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('最終決戦　所長 参上', W/2, H*0.60);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
 }
 
 // 中ボス撃破 → 第三面へ
@@ -1113,6 +1176,7 @@ function draw(){
     drawFireBtn();
     drawChips();
     drawHUD();
+    if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
     if(flash > 0){
       ctx.globalAlpha = flash/12; ctx.fillStyle = '#ede4d3';
       ctx.fillRect(0,0,W,H); ctx.globalAlpha = 1;
@@ -1126,7 +1190,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v12', s:24, gap:30},
+      {t:'書類インベーダー　v13', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1152,7 +1216,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v12', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v13', 5, 9);
   ctx.restore();
 }
 
