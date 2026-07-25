@@ -85,7 +85,6 @@ const ITEMS = [
 ];
 const MAX_LIVES = 5, MAX_WINGS = 2;
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
-const FIRE = { x: 8, y: H-116, w: 48, h: 48 };   // 左下：その場で撃つ迎撃ボタン
 const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
 
@@ -160,7 +159,7 @@ function reset(){
   wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
-  makeWave(1); state = 'play'; setMsg('第一面　申請書類の群れ', 90);
+  makeWave(1); state = 'play'; setMsg('第一面　申告書類の群れ', 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
 
@@ -249,16 +248,13 @@ addEventListener('keyup', e=>{
   if(e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyZ') kbCharge = false;
 });
 
-let touchX = null, movePtr = null, chargePtr = null, firePtr = null;
+let touchX = null, movePtr = null, chargePtr = null;
 function pos(e){
   const r = cv.getBoundingClientRect();
   return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
 }
 function inBtn(p){
   return p.x > BTN.x-8 && p.x < BTN.x+BTN.w+8 && p.y > BTN.y-8 && p.y < BTN.y+BTN.h+8;
-}
-function inFire(p){
-  return p.x > FIRE.x-8 && p.x < FIRE.x+FIRE.w+8 && p.y > FIRE.y-8 && p.y < FIRE.y+FIRE.h+8;
 }
 function inMute(p){
   return p.x > MUTE.x-8 && p.x < MUTE.x+MUTE.w+8 && p.y > MUTE.y-8 && p.y < MUTE.y+MUTE.h+8;
@@ -270,13 +266,11 @@ cv.addEventListener('pointerdown', e=>{
   if(inMute(p)){ toggleMute(); return; }   // ミュート切替（開始前でも押せる）
   if(state !== 'play'){ tap(); return; }
   if(inBtn(p) && chargePtr === null){ chargePtr = e.pointerId; return; }
-  if(inFire(p) && firePtr === null){ firePtr = e.pointerId; shoot(); return; }   // その場撃ち（動かない）
   movePtr = e.pointerId; touchX = p.x; shoot();
 });
 cv.addEventListener('pointermove', e=>{ if(e.pointerId === movePtr) touchX = pos(e).x; });
 function ptrEnd(e){
   if(e.pointerId === chargePtr) chargePtr = null;
-  if(e.pointerId === firePtr) firePtr = null;
   if(e.pointerId === movePtr){ movePtr = null; touchX = null; }
 }
 cv.addEventListener('pointerup', ptrEnd);
@@ -428,14 +422,9 @@ function update(){
 
   // 自機（貯め中は足が止まり気味、通常弾も出ない）
   const mv = charge > 0 ? .5 : 1;
-  const holdFire = firePtr !== null;   // 迎撃ボタン押下中は足を止めて正面へ連射
-  if(!holdFire){
-    if(keys.ArrowLeft) player.x -= player.speed * mv;
-    if(keys.ArrowRight) player.x += player.speed * mv;
-  }
-  if(holdFire){
-    if(player.cool <= 0) shoot();        // その場撃ち（移動しない）
-  } else if(touchX !== null){
+  if(keys.ArrowLeft) player.x -= player.speed * mv;
+  if(keys.ArrowRight) player.x += player.speed * mv;
+  if(touchX !== null){
     const d = touchX - player.x;
     // 指位置へ機敏に追従（近距離はそのまま、遠距離は上限で頭打ち）
     const step = Math.abs(d) < 2 ? d : Math.max(-16, Math.min(16, d * .6));
@@ -1118,26 +1107,6 @@ function drawBtn(){
   ctx.restore();
 }
 
-function drawFireBtn(){
-  const b = FIRE, on = firePtr !== null;
-  ctx.save();
-  ctx.globalAlpha = on ? 1 : .55;
-  ctx.fillStyle = on ? 'rgba(216,180,92,.4)' : 'rgba(184,145,47,.15)';
-  ctx.fillRect(b.x, b.y, b.w, b.h);
-  ctx.strokeStyle = '#d8b45c'; ctx.lineWidth = 1.5;
-  ctx.strokeRect(b.x+.5, b.y+.5, b.w-1, b.h-1);
-  // 上向き矢印（正面へ撃つ）
-  const cx = b.x+b.w/2, cy = b.y+b.h/2-4;
-  ctx.fillStyle = '#ede4d3';
-  ctx.beginPath();
-  ctx.moveTo(cx, cy-9); ctx.lineTo(cx-7, cy+1); ctx.lineTo(cx-2.5, cy+1);
-  ctx.lineTo(cx-2.5, cy+8); ctx.lineTo(cx+2.5, cy+8); ctx.lineTo(cx+2.5, cy+1);
-  ctx.lineTo(cx+7, cy+1); ctx.closePath(); ctx.fill();
-  ctx.font = '7px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('その場撃ち', b.x+b.w/2, b.y+b.h-6);
-  ctx.restore();
-}
-
 function drawItem(it){
   const d = ITEMS[it.kind], r = 9, bob = Math.sin(it.t/12)*1.5;
   ctx.save();
@@ -1266,7 +1235,6 @@ function draw(){
     }
     if(charge > 0) drawCharge();
     drawBtn();
-    drawFireBtn();
     drawChips();
     drawHUD();
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
@@ -1285,8 +1253,8 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v15', s:24, gap:30},
-      {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
+      {t:'書類インベーダー　v16', s:24, gap:30},
+      {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
       {t:'分身で僚機・貫通弾も', s:10, c:'#5aa9e6', gap:22},
@@ -1311,7 +1279,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v15', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v16', 5, 9);
   ctx.restore();
 }
 
