@@ -733,6 +733,9 @@ function draw(){
     ]);
   }
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
+  // ビルド確認用（キャッシュ判別）：左上に小さく表示
+  ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v2', 5, 9);
   ctx.restore();
 }
 
