@@ -57,6 +57,7 @@ const ITEMS = [
   { k:'shield', label:'受', name:'受理印', col:'#b8912f' }
 ];
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
+const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
 
 function newPlayer(){
   return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
@@ -87,6 +88,7 @@ function reset(){
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一波　申請書類の群れ', 90);
+  bgmPlay();   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
 
 function setMsg(t, f){ msg = t; msgTimer = f; }
@@ -105,6 +107,26 @@ function beep(freq, dur, type='square', vol=.05){
   }catch(e){}
 }
 
+/* ---------- BGM（申請書類の雪崩） ---------- */
+let bgm = null, muted = false;
+function bgmPlay(){
+  if(muted) return;
+  try{
+    if(!bgm){
+      bgm = new Audio('assets/paperavalanche.mp3');
+      bgm.loop = true; bgm.volume = .45; bgm.preload = 'auto';
+    }
+    bgm.play().catch(()=>{});   // 端末のミュート等で失敗しても無視
+  }catch(e){}
+}
+function bgmStop(){ if(bgm){ try{ bgm.pause(); }catch(e){} } }
+function toggleMute(){
+  muted = !muted;
+  if(muted) bgmStop();
+  else if(state === 'play') bgmPlay();
+  return muted;
+}
+
 /* ---------- 入力 ---------- */
 const keys = {};
 addEventListener('keydown', e=>{
@@ -112,6 +134,7 @@ addEventListener('keydown', e=>{
   if(['ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
   if(e.code === 'Space' || e.code === 'Enter') tap();
   if(e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyZ') kbCharge = true;
+  if(e.code === 'KeyM') toggleMute();
 });
 addEventListener('keyup', e=>{
   keys[e.code] = false;
@@ -126,9 +149,13 @@ function pos(e){
 function inBtn(p){
   return p.x > BTN.x-8 && p.x < BTN.x+BTN.w+8 && p.y > BTN.y-8 && p.y < BTN.y+BTN.h+8;
 }
+function inMute(p){
+  return p.x > MUTE.x-8 && p.x < MUTE.x+MUTE.w+8 && p.y > MUTE.y-8 && p.y < MUTE.y+MUTE.h+8;
+}
 cv.addEventListener('pointerdown', e=>{
   const p = pos(e);
   cv.setPointerCapture(e.pointerId);
+  if(inMute(p)){ toggleMute(); return; }   // ミュート切替（開始前でも押せる）
   if(state !== 'play'){ tap(); return; }
   if(inBtn(p) && chargePtr === null){ chargePtr = e.pointerId; return; }
   movePtr = e.pointerId; touchX = p.x; shoot();
@@ -539,6 +566,26 @@ function drawHUD(){
   ctx.fillText(s.trim(), W/2, H-12);
 }
 
+function drawMute(){
+  const cx = MUTE.x + MUTE.w/2, cy = MUTE.y + MUTE.h/2;
+  ctx.fillStyle = 'rgba(237,228,211,.7)';
+  // スピーカー本体
+  ctx.beginPath();
+  ctx.moveTo(cx-6, cy-3); ctx.lineTo(cx-3, cy-3); ctx.lineTo(cx+1, cy-6);
+  ctx.lineTo(cx+1, cy+6); ctx.lineTo(cx-3, cy+3); ctx.lineTo(cx-6, cy+3);
+  ctx.closePath(); ctx.fill();
+  if(muted){
+    // ミュート時は赤い斜線
+    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx-7, cy-7); ctx.lineTo(cx+8, cy+8); ctx.stroke();
+  }else{
+    // 再生中は音波
+    ctx.strokeStyle = 'rgba(216,180,92,.9)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(cx+2, cy, 5, -Math.PI/3, Math.PI/3); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx+2, cy, 8, -Math.PI/3, Math.PI/3); ctx.stroke();
+  }
+}
+
 function center(lines){
   ctx.fillStyle = 'rgba(14,23,48,.82)';
   ctx.fillRect(0, H/2-100, W, 200);
@@ -616,9 +663,14 @@ function draw(){
       {t:'タップで再挑戦', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
     ]);
   }
+  drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   ctx.restore();
 }
 
-function loop(){ update(); draw(); requestAnimationFrame(loop); }
+function loop(){
+  update(); draw();
+  if(bgm && state !== 'play' && !bgm.paused) bgmStop();   // クリア/ゲームオーバー/タイトルで停止
+  requestAnimationFrame(loop);
+}
 resize(); player = newPlayer(); bullets = []; ebullets = []; enemies = [];
 loop();
