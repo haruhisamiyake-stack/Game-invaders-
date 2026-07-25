@@ -8,7 +8,9 @@
       "**/.*",
       ".git/**",
       ".firebase/**",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "shinkansen.html",
+      "dev/**"
     ],
     "headers": [
       {
