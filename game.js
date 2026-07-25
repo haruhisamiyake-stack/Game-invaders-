@@ -68,8 +68,10 @@ const ITEMS = [
   { k:'sub',    label:'副', name:'副印',   col:'#d8b45c' },
   { k:'rapid',  label:'速', name:'速筆',   col:'#ede4d3' },
   { k:'ink',    label:'朱', name:'朱肉',   col:'#c0392b' },
-  { k:'shield', label:'受', name:'受理印', col:'#b8912f' }
+  { k:'shield', label:'受', name:'受理印', col:'#b8912f' },
+  { k:'heal',   label:'薬', name:'回復薬', col:'#3aa76d' }   // ライフ回復（緑）
 ];
+const MAX_LIVES = 5;
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
 const FIRE = { x: 8, y: H-116, w: 48, h: 48 };   // 左下：その場で撃つ迎撃ボタン
 const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
@@ -272,7 +274,9 @@ function shoot(){
 /* ---------- パワーアップ ---------- */
 function maybeDrop(x, y, rate){
   if(Math.random() > (rate === undefined ? .14 : rate)) return;
-  const w = [30, 28, 24, 18], total = 100;
+  // 副印/速筆/朱肉/受理印/回復薬（回復薬はやや低確率。ライフ満タン時は出さない）
+  const w = [27, 25, 22, 16, lives < MAX_LIVES ? 10 : 0];
+  const total = w.reduce((a, b) => a + b, 0);
   let r = Math.random()*total, i = 0;
   while(r > w[i] && i < w.length-1){ r -= w[i]; i++; }
   items.push({ x: x, y: y, kind: i, t: 0 });
@@ -284,6 +288,12 @@ function pickUp(it){
   else if(d.k === 'rapid'){ player.rapidT = 780; }
   else if(d.k === 'ink'){   ki = 100; }
   else if(d.k === 'shield'){ player.shield = true; }
+  else if(d.k === 'heal'){
+    if(lives < MAX_LIVES){ lives++; setMsg('回復薬　ライフ＋1', 30); }
+    else { score += 200; setMsg('回復薬　満タン（＋200）', 30); }
+    beep(660, .1, 'triangle', .06); beep(990, .12, 'triangle', .05); beep(1320, .12, 'sine', .04);
+    return;
+  }
   setMsg(d.name + '　入手', 26);
   beep(700, .08, 'triangle', .05); beep(1050, .1, 'triangle', .04);
 }
@@ -831,6 +841,10 @@ function drawItem(it){
   ctx.fillStyle = d.col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = '12px "Yu Mincho",serif';
   ctx.fillText(d.label, 0, 1);
+  if(d.k === 'heal'){   // 回復薬は右上に小さな十字（回復の記号）
+    ctx.fillStyle = '#3aa76d';
+    ctx.fillRect(r-5, -r+1, 4, 1.4); ctx.fillRect(r-4.3, -r+.3, 1.4, 4);
+  }
   ctx.restore();
 }
 
@@ -951,10 +965,10 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v6', s:24, gap:30},
+      {t:'書類インベーダー　v7', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
-      {t:'落ちてくる印を拾って強化：副印・速筆・朱肉・受理印', s:10.5, c:'rgba(237,228,211,.7)', gap:22},
+      {t:'落ちてくる印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:22},
       {t:'三つの波を越えると、何かが出る', s:12, c:'#d8b45c', gap:32},
       {t:'タップ / スペースで開始', s:12, f:'system-ui,sans-serif', c:'#ede4d3'}
     ]);
@@ -976,7 +990,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v6', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v7', 5, 9);
   ctx.restore();
 }
 
