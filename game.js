@@ -128,13 +128,13 @@ function unlockAudio(){
   }catch(e){}
   if(audioPrimed) return;                        // BGMのアンロックは一度だけ
   audioPrimed = true;
-  for(const k in BGM){
-    try{
-      const a = bgmEl(k);
-      // ジェスチャ内で一度再生して解錠。今流したい曲以外は即停止
-      a.play().then(()=>{ if(curTrack !== k){ try{ a.pause(); a.currentTime = 0; }catch(e){} } }).catch(()=>{});
-    }catch(e){}
-  }
+  // BGMは単一の<audio>を使い、ジェスチャ内で一度再生して解錠する。
+  // （iOSは1ジェスチャで解錠できる要素が限られるため、要素を1つに統一）
+  try{
+    const a = bgmAudioEl();
+    if(!a.src){ a.src = BGM.normal.file; }
+    a.play().then(()=>{ if(!curTrack){ try{ a.pause(); }catch(e){} } }).catch(()=>{});
+  }catch(e){}
 }
 function beep(freq, dur, type='square', vol=.05){
   try{
@@ -150,30 +150,35 @@ function beep(freq, dur, type='square', vol=.05){
 }
 
 /* ---------- BGM（通常＝申請書類の雪崩／ボス戦＝専用曲） ---------- */
+// iOSでは1ジェスチャで解錠できるメディア要素が限られるため、
+// 複数の<audio>を持たず、単一要素の src を差し替えて曲を切り替える。
 const BGM = {
-  normal: { file: 'assets/paperavalanche.mp3', vol: .45, el: null },
-  boss:   { file: 'assets/boss-theme.mp3',     vol: .5,  el: null }
+  normal: { file: 'assets/paperavalanche.mp3', vol: .45 },
+  boss:   { file: 'assets/boss-theme.mp3',     vol: .5  }
 };
-let muted = false, curTrack = null;
-function bgmEl(name){
-  const t = BGM[name];
-  if(!t.el){
-    t.el = new Audio(t.file);
-    t.el.loop = true; t.el.volume = t.vol; t.el.preload = 'auto';
+let muted = false, curTrack = null, bgmAudio = null;
+function bgmAudioEl(){
+  if(!bgmAudio){
+    bgmAudio = new Audio();
+    bgmAudio.loop = true; bgmAudio.preload = 'auto';
   }
-  return t.el;
+  return bgmAudio;
 }
 function bgmSet(name, restart){
   curTrack = name;
   if(muted) return;
+  const t = BGM[name];
+  if(!t) return;
   try{
-    for(const k in BGM){ if(k !== name && BGM[k].el && !BGM[k].el.paused) BGM[k].el.pause(); }
-    const a = bgmEl(name);
-    if(restart){ try{ a.currentTime = 0; }catch(e){} }
+    const a = bgmAudioEl();
+    const want = new URL(t.file, location.href).href;
+    if(a.src !== want){ a.src = t.file; }               // 曲を差し替え（＝先頭から）
+    else if(restart){ try{ a.currentTime = 0; }catch(e){} }
+    a.volume = t.vol;
     a.play().catch(()=>{});   // 端末のミュート等で失敗しても無視
   }catch(e){}
 }
-function bgmStop(){ for(const k in BGM){ if(BGM[k].el){ try{ BGM[k].el.pause(); }catch(e){} } } }
+function bgmStop(){ if(bgmAudio){ try{ bgmAudio.pause(); }catch(e){} } }
 function toggleMute(){
   muted = !muted;
   if(muted) bgmStop();
