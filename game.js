@@ -69,6 +69,7 @@ let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let midDone = false;   // 中ボスを倒したか
 let introT = 0, introMax = 0, introBlots = [];   // ラスボス登場演出
+let morphT = 0, morphMax = 0, morphBlots = [], morphCol = '#c0392b', morphInk = '#4e0a0c';   // 形態変化演出
 let dir = 1, stepTimer = 0, shake = 0;
 let ki = 0, charge = 0, beam = null, kbCharge = false, frame = 0, flash = 0;
 let items = [];
@@ -136,6 +137,7 @@ function bossDown(){
     score += 300; shake = 18; flash = 12;
     setMsg('所長、本気の顔で復活', 130);
     beep(200, .5, 'sawtooth', .06); beep(300, .5, 'square', .05);
+    startMorph(2);   // 変身演出（朱墨）
     // BGMはボス曲を継続（頭出しし直したい場合は bgmSet('boss', true)）
   } else if(b.phase === 2){
     b.phase = 3;
@@ -147,13 +149,14 @@ function bossDown(){
     score += 500; shake = 22; flash = 14;
     setMsg('第三形態！鼻からたま・ビーム', 150);
     beep(220, .5, 'sawtooth', .06); beep(330, .5, 'square', .05); beep(160, .6, 'triangle', .05);
+    startMorph(3);   // 変身演出（紫の墨）
   } else {
     state = 'win'; score += 1000; shake = 20; beep(880, .5, 'triangle', .06);
   }
 }
 
 function reset(){
-  wave = 1; score = 0; lives = 3; midDone = false; introT = 0;
+  wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　申請書類の群れ', 90);
@@ -403,6 +406,7 @@ function update(){
   if(flash > 0) flash--;
   if(state !== 'play') return;
   if(introT > 0){ updateIntro(); return; }   // ラスボス登場演出（インクブリード）中は進行停止
+  if(morphT > 0){ morphT--; return; }        // 形態変化演出中は進行停止
 
   // 気力：時間で少し、書類を捌くと多く回復
   ki = Math.min(100, ki + .05);
@@ -696,6 +700,42 @@ function drawIntro(){
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('最終決戦　所長 参上', W/2, H*0.60);
     ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+/* ---------- 形態変化演出（ボスから墨が弾ける） ---------- */
+function startMorph(toPhase){
+  morphMax = morphT = 66;
+  ebullets = []; missiles = [];   // 変身の衝撃で敵弾を一掃
+  morphCol = toPhase === 3 ? '#8e44ad' : '#c0392b';   // 第三＝紫／第二＝朱
+  morphInk = toPhase === 3 ? '#2c1046' : '#4e0a0c';
+  morphBlots = [];
+  for(let i=0;i<14;i++){
+    const ang = Math.random()*6.283, dist = Math.random()*70;
+    morphBlots.push({ dx: Math.cos(ang)*dist, dy: Math.sin(ang)*dist,
+                      r: 6 + Math.random()*10, delay: Math.random()*16 });
+  }
+}
+function drawMorph(){
+  const b = bossObj; if(!b) return;
+  const t = morphMax - morphT;
+  const fade = morphT < 20 ? morphT/20 : 1;   // 終盤で墨が引いて新形態が現れる
+  const cx = b.x, cy = b.y;
+  ctx.save();
+  // 衝撃波リング
+  if(t < 30){
+    ctx.globalAlpha = Math.max(0, 1 - t/30);
+    ctx.strokeStyle = morphCol; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(cx, cy, t*7, 0, 6.283); ctx.stroke();
+  }
+  // 墨が弾けて広がる
+  for(const bl of morphBlots){
+    const lt = t - bl.delay; if(lt <= 0) continue;
+    const gr = bl.r + lt*3.4;
+    ctx.globalAlpha = Math.min(1, lt/14) * fade;
+    ctx.fillStyle = morphInk; ctx.beginPath(); ctx.arc(cx+bl.dx, cy+bl.dy, gr, 0, 6.283); ctx.fill();
+    ctx.fillStyle = morphCol; ctx.beginPath(); ctx.arc(cx+bl.dx, cy+bl.dy, gr*.6, 0, 6.283); ctx.fill();
   }
   ctx.restore();
 }
@@ -1177,6 +1217,7 @@ function draw(){
     drawChips();
     drawHUD();
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
+    if(morphT > 0) drawMorph();   // 形態変化演出
     if(flash > 0){
       ctx.globalAlpha = flash/12; ctx.fillStyle = '#ede4d3';
       ctx.fillRect(0,0,W,H); ctx.globalAlpha = 1;
@@ -1190,7 +1231,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v13', s:24, gap:30},
+      {t:'書類インベーダー　v14', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1216,7 +1257,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v13', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v14', 5, 9);
   ctx.restore();
 }
 
