@@ -88,7 +88,7 @@ function reset(){
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一波　申請書類の群れ', 90);
-  bgmPlay();   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
+  bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
 
 function setMsg(t, f){ msg = t; msgTimer = f; }
@@ -107,23 +107,35 @@ function beep(freq, dur, type='square', vol=.05){
   }catch(e){}
 }
 
-/* ---------- BGM（申請書類の雪崩） ---------- */
-let bgm = null, muted = false;
-function bgmPlay(){
+/* ---------- BGM（通常＝申請書類の雪崩／ボス戦＝専用曲） ---------- */
+const BGM = {
+  normal: { file: 'assets/paperavalanche.mp3', vol: .45, el: null },
+  boss:   { file: 'assets/boss-theme.mp3',     vol: .5,  el: null }
+};
+let muted = false, curTrack = null;
+function bgmEl(name){
+  const t = BGM[name];
+  if(!t.el){
+    t.el = new Audio(t.file);
+    t.el.loop = true; t.el.volume = t.vol; t.el.preload = 'auto';
+  }
+  return t.el;
+}
+function bgmSet(name, restart){
+  curTrack = name;
   if(muted) return;
   try{
-    if(!bgm){
-      bgm = new Audio('assets/paperavalanche.mp3');
-      bgm.loop = true; bgm.volume = .45; bgm.preload = 'auto';
-    }
-    bgm.play().catch(()=>{});   // 端末のミュート等で失敗しても無視
+    for(const k in BGM){ if(k !== name && BGM[k].el && !BGM[k].el.paused) BGM[k].el.pause(); }
+    const a = bgmEl(name);
+    if(restart){ try{ a.currentTime = 0; }catch(e){} }
+    a.play().catch(()=>{});   // 端末のミュート等で失敗しても無視
   }catch(e){}
 }
-function bgmStop(){ if(bgm){ try{ bgm.pause(); }catch(e){} } }
+function bgmStop(){ for(const k in BGM){ if(BGM[k].el){ try{ BGM[k].el.pause(); }catch(e){} } } }
 function toggleMute(){
   muted = !muted;
   if(muted) bgmStop();
-  else if(state === 'play') bgmPlay();
+  else if(state === 'play') bgmSet(curTrack || 'normal', false);   // 消音前の曲を再開
   return muted;
 }
 
@@ -318,7 +330,7 @@ function update(){
 function updateSwarm(){
   const live = enemies.filter(e => e.alive);
   if(live.length === 0){
-    if(wave >= 3){ makeBoss(); setMsg('最終波　所長が出てきた', 120); beep(200,.5,'sawtooth',.06); }
+    if(wave >= 3){ makeBoss(); setMsg('最終波　所長が出てきた', 120); beep(200,.5,'sawtooth',.06); bgmSet('boss', true); }
     else { wave++; makeWave(wave); player.inv = 60;
            setMsg(wave === 2 ? '第二波　書類が増えた' : '第三波', 90); }
     return;
@@ -669,7 +681,7 @@ function draw(){
 
 function loop(){
   update(); draw();
-  if(bgm && state !== 'play' && !bgm.paused) bgmStop();   // クリア/ゲームオーバー/タイトルで停止
+  if(state !== 'play') bgmStop();   // クリア/ゲームオーバー/タイトルで停止
   requestAnimationFrame(loop);
 }
 resize(); player = newPlayer(); bullets = []; ebullets = []; enemies = [];
