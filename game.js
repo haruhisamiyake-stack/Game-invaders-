@@ -91,9 +91,13 @@ function makeWave(n){
   const gapX = 42, gapY = 34, x0 = (W - (cols-1)*gapX)/2, y0 = 96;
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
+      // 後列（r=0）は分厚い書類束＝複数ヒットで倒す固い敵（波が進むほど硬い）
+      const tough = (r === 0);
+      const hp = tough ? 1 + Math.min(2, n) : 1;   // 2〜3発
       enemies.push({
         x: x0 + c*gapX, y: y0 + r*gapY, w: 26, h: 20, alive: true,
-        kind: r % 3, pt: (rows - r) * 10, f: 0
+        kind: r % 3, pt: (rows - r) * 10 + (tough ? 20 : 0), f: 0,
+        hp: hp, maxhp: hp, hurt: 0
       });
     }
   }
@@ -472,13 +476,22 @@ function updateSwarm(){
     const s = live[Math.floor(Math.random()*live.length)];
     ebullets.push({ x: s.x, y: s.y + 12, vy: 2.6 + wave*.2, kind:0 });
   }
+  for(const e of live){ if(e.hurt > 0) e.hurt--; }
   // 命中判定
   for(const b of bullets){
     for(const e of live){
-      if(Math.abs(b.x - e.x) < e.w/2 + 2 && Math.abs(b.y - e.y) < e.h/2 + 4){
-        e.alive = false; if(!b.pierce) b.dead = true; score += e.pt;   // 貫通弾は消えず次列へ
-        ki = Math.min(100, ki + 6); maybeDrop(e.x, e.y);
-        beep(520, .07, 'square', .04); break;
+      if(e.alive && Math.abs(b.x - e.x) < e.w/2 + 2 && Math.abs(b.y - e.y) < e.h/2 + 4){
+        if(!b.pierce) b.dead = true;
+        e.hp--;
+        if(e.hp <= 0){                              // 撃破
+          e.alive = false; score += e.pt;
+          ki = Math.min(100, ki + 6); maybeDrop(e.x, e.y);
+          beep(520, .07, 'square', .04);
+        } else {                                    // 固い敵：ヒットしたが未撃破
+          e.hurt = 4; score += 2; ki = Math.min(100, ki + 1);
+          beep(360, .04, 'square', .03);
+        }
+        break;
       }
     }
   }
@@ -684,17 +697,32 @@ function drawMissiles(){
 }
 function drawDoc(e){
   const x = e.x - e.w/2, y = e.y - e.h/2;
-  const tint = ['#ede4d3', '#dfd3bd', '#cfc0a6'][e.kind];
+  const tough = e.maxhp > 1;
+  if(tough){
+    // 分厚い書類束：重なりで厚みを表現＋青系の別色
+    ctx.fillStyle = '#243a63';
+    ctx.fillRect(x+3, y+3, e.w, e.h);
+    ctx.fillStyle = '#33517f';
+    ctx.fillRect(x+1.5, y+1.5, e.w, e.h);
+  }
+  let tint = tough ? '#6d86b8' : ['#ede4d3', '#dfd3bd', '#cfc0a6'][e.kind];
+  if(e.hurt > 0) tint = '#ffffff';                 // 被弾フラッシュ
   ctx.fillStyle = tint;
   ctx.fillRect(x, y, e.w, e.h);
   ctx.fillStyle = '#16233f';
   ctx.beginPath(); ctx.moveTo(x+e.w-7, y); ctx.lineTo(x+e.w, y); ctx.lineTo(x+e.w, y+7); ctx.fill();
-  ctx.fillStyle = 'rgba(22,35,63,.55)';
+  ctx.fillStyle = tough ? 'rgba(237,244,255,.55)' : 'rgba(22,35,63,.55)';
   for(let i=0;i<3;i++) ctx.fillRect(x+4, y+5 + i*5 + (e.f?0:1), e.w-10 - (i===2?6:0), 1.5);
-  ctx.strokeStyle = '#b8912f'; ctx.lineWidth = 1;
+  ctx.strokeStyle = tough ? '#c0392b' : '#b8912f'; ctx.lineWidth = tough ? 1.5 : 1;
   ctx.strokeRect(x+.5, y+.5, e.w-1, e.h-1);
-  ctx.fillStyle = '#c0392b';
-  ctx.beginPath(); ctx.arc(x+e.w-6, y+e.h-5, 2.6, 0, Math.PI*2); ctx.fill();
+  if(tough){
+    // 束ねる朱の帯＋残り耐久ピップ
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(x, y+e.h/2-1.5, e.w, 3);
+    for(let i=0;i<e.hp;i++){ ctx.fillStyle = '#c0392b'; ctx.fillRect(x+3+i*4, y+2, 2.5, 2.5); }
+  } else {
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath(); ctx.arc(x+e.w-6, y+e.h-5, 2.6, 0, Math.PI*2); ctx.fill();
+  }
 }
 
 function drawSealShip(x, y, scale, alpha){
@@ -996,7 +1024,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v9', s:24, gap:30},
+      {t:'書類インベーダー　v10', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1022,7 +1050,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v9', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v10', 5, 9);
   ctx.restore();
 }
 
