@@ -494,18 +494,18 @@ function updateBoss(){
   // 第三形態：鼻からビーム（溜め→発射）
   if(p3) updateNoseBeam(b, noseX, noseY);
 
-  // 復活形態（第二・第三）は誘導ミサイルを発射
+  // 復活形態（第二・第三）は各種ミサイルを発射
   if(b.phase >= 2){
     b.mslCool = (b.mslCool || 0) - 1;
     if(b.mslCool <= 0){
-      b.mslCool = p3 ? 110 : 165;
+      b.mslCool = p3 ? 108 : 165;
       const count = p3 ? 2 : 1;
-      const sy = p3 ? noseY : b.y + b.h/2 - 6;
+      const sx = p3 ? noseX : b.x, sy = p3 ? noseY : b.y + b.h/2 - 6;
+      const pool = p3 ? ['homing','zigzag','splitter','armored'] : ['homing','zigzag'];
       for(let i=0;i<count;i++){
-        const ang = Math.PI/2 + (i - (count-1)/2) * .5;   // 初速は下向き
-        missiles.push({ x: p3 ? noseX : b.x, y: sy,
-                        vx: Math.cos(ang)*1.4, vy: Math.sin(ang)*1.4,
-                        spd: p3 ? 2.5 : 2.1, turn: p3 ? .06 : .05, life: 300 });
+        const kind = pool[Math.floor(Math.random() * pool.length)];
+        const aim = Math.atan2(player.y - sy, player.x - sx);
+        spawnMissile(sx, sy, kind, aim, p3);
       }
       beep(520, .12, 'square', .04);
     }
@@ -547,18 +547,51 @@ function updateNoseBeam(b, noseX, noseY){
   }
 }
 
-// 誘導ミサイル：自機へ緩やかに旋回して追尾。自弾で撃墜可・必殺で消せる
+// ミサイル生成（種類ごとに挙動を変える）
+// homing=追尾／zigzag=蛇行／splitter=分裂／armored=重装甲(2発耐久)
+function spawnMissile(x, y, kind, aim, p3){
+  const m = { x, y, kind, t: 0, dead: false, hp: 1,
+              vx: Math.cos(aim)*1.4, vy: Math.sin(aim)*1.4, spd: 2.2, life: 320 };
+  if(kind === 'homing'){   m.spd = p3 ? 2.5 : 2.1; m.turn = p3 ? .06 : .05; }
+  else if(kind === 'zigzag'){ m.spd = p3 ? 2.3 : 2.0; m.phase = Math.random()*6.28; m.amp = 2.8; }
+  else if(kind === 'splitter'){ m.spd = 2.1; m.vx = Math.cos(aim)*m.spd; m.vy = Math.sin(aim)*m.spd; m.fuse = p3 ? 48 : 60; }
+  else if(kind === 'armored'){ m.spd = p3 ? 1.8 : 1.6; m.turn = .045; m.hp = 2; m.life = 380; }
+  missiles.push(m);
+}
+
+// ミサイル更新：種類別に動かし、自弾で撃墜可・必殺で消去可
 function updateMissiles(){
+  const burst = [];   // 分裂で生成する敵弾を後でまとめて追加
   for(const m of missiles){
-    const desired = Math.atan2(player.y - m.y, player.x - m.x);
-    let cur = Math.atan2(m.vy, m.vx);
-    let diff = desired - cur;
-    while(diff > Math.PI) diff -= Math.PI*2;
-    while(diff < -Math.PI) diff += Math.PI*2;
-    cur += Math.max(-m.turn, Math.min(m.turn, diff));   // 旋回速度に上限＝避けられる
-    m.vx = Math.cos(cur) * m.spd;
-    m.vy = Math.sin(cur) * m.spd;
-    m.x += m.vx; m.y += m.vy;
+    m.t++;
+    if(m.kind === 'zigzag'){
+      // 蛇行しながら降下＋自機側へわずかに寄る
+      const dx = Math.sin(m.t * .16 + m.phase) * m.amp + Math.sign(player.x - m.x) * .5;
+      m.x += dx; m.y += m.spd; m.vx = dx; m.vy = m.spd;
+    } else if(m.kind === 'splitter'){
+      m.x += m.vx; m.y += m.vy;
+      m.fuse--;
+      if(m.fuse <= 0){
+        // 自機方向へ扇状に分裂
+        const aim = Math.atan2(player.y - m.y, player.x - m.x), n = 5;
+        for(let i=0;i<n;i++){
+          const a = aim + (i - (n-1)/2) * .34;
+          burst.push({ x: m.x, y: m.y, vx: Math.cos(a)*2.2, vy: Math.sin(a)*2.2, kind: 1 });
+        }
+        m.dead = true; shake = 6; beep(300, .12, 'square', .05);
+        continue;
+      }
+    } else {
+      // homing / armored：自機へ緩やかに旋回（旋回上限＝避けられる）
+      const desired = Math.atan2(player.y - m.y, player.x - m.x);
+      let cur = Math.atan2(m.vy, m.vx);
+      let diff = desired - cur;
+      while(diff > Math.PI) diff -= Math.PI*2;
+      while(diff < -Math.PI) diff += Math.PI*2;
+      cur += Math.max(-m.turn, Math.min(m.turn, diff));
+      m.vx = Math.cos(cur) * m.spd; m.vy = Math.sin(cur) * m.spd;
+      m.x += m.vx; m.y += m.vy;
+    }
     m.life--;
     // 自機に被弾
     if(player.inv <= 0 && Math.abs(m.x - player.x) < 14 && Math.abs(m.y - player.y) < 13){
@@ -571,34 +604,50 @@ function updateMissiles(){
         if(lives <= 0){ state = 'over'; setMsg('', 0); }
       }
     }
-    // 自弾で撃墜
+    // 自弾で撃墜（重装甲は2発必要）
     if(!m.dead){
       for(const bl of bullets){
         if(!bl.dead && Math.abs(bl.x - m.x) < 9 && Math.abs(bl.y - m.y) < 10){
-          bl.dead = true; m.dead = true; score += 8; ki = Math.min(100, ki + 1);
-          beep(560, .05, 'square', .03); break;
+          bl.dead = true; m.hp--;
+          if(m.hp <= 0){ m.dead = true; score += 8; ki = Math.min(100, ki + 1); beep(560, .05, 'square', .03); }
+          else { score += 3; m.hurt = 4; beep(400, .04, 'square', .03); }
+          break;
         }
       }
     }
+    if(m.hurt > 0) m.hurt--;
   }
+  if(burst.length) ebullets.push(...burst);
   bullets = bullets.filter(bl => !bl.dead);
   missiles = missiles.filter(m => !m.dead && m.life > 0 &&
                                   m.x > -24 && m.x < W+24 && m.y > -24 && m.y < H+24);
 }
 
 /* ---------- 描画 ---------- */
+const MSL_COL = { homing:'#c0392b', zigzag:'#d8b45c', splitter:'#2e8b8b', armored:'#7f8a99' };
 function drawMissiles(){
   for(const m of missiles){
-    const ang = Math.atan2(m.vy, m.vx);
+    const ang = Math.atan2(m.vy || 1, m.vx || 0);
+    const big = m.kind === 'armored';
+    const bw = big ? 13 : 11, bh = big ? 8 : 6;
+    let body = MSL_COL[m.kind] || '#c0392b';
+    if(m.hurt > 0) body = '#ede4d3';   // 被弾フラッシュ（重装甲）
     ctx.save();
     ctx.translate(m.x, m.y); ctx.rotate(ang);
     // 噴射炎
     ctx.fillStyle = 'rgba(216,180,92,' + (.5 + .4*Math.abs(Math.sin(frame/3))) + ')';
-    ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(-12,-2.5); ctx.lineTo(-12,2.5); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(-12,-2.6); ctx.lineTo(-12,2.6); ctx.closePath(); ctx.fill();
     // 弾体
-    ctx.fillStyle = '#c0392b'; ctx.fillRect(-6,-3,11,6);
+    ctx.fillStyle = body; ctx.fillRect(-6, -bh/2, bw, bh);
     // 弾頭
-    ctx.fillStyle = '#ede4d3'; ctx.beginPath(); ctx.moveTo(5,-3); ctx.lineTo(10,0); ctx.lineTo(5,3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ede4d3';
+    ctx.beginPath(); ctx.moveTo(-6+bw, -bh/2); ctx.lineTo(-6+bw+5, 0); ctx.lineTo(-6+bw, bh/2); ctx.closePath(); ctx.fill();
+    if(big){   // 重装甲は装甲リベット
+      ctx.fillStyle = '#3a4250'; ctx.fillRect(-4, -bh/2+1, 2, bh-2); ctx.fillRect(0, -bh/2+1, 2, bh-2);
+    }
+    if(m.kind === 'splitter' && m.fuse < 22 && Math.floor(m.fuse/3) % 2){   // 分裂間近は点滅
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(1, 0, 2.4, 0, Math.PI*2); ctx.fill();
+    }
     ctx.restore();
   }
 }
@@ -902,7 +951,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v5', s:24, gap:30},
+      {t:'書類インベーダー　v6', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'落ちてくる印を拾って強化：副印・速筆・朱肉・受理印', s:10.5, c:'rgba(237,228,211,.7)', gap:22},
@@ -927,7 +976,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v5', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v6', 5, 9);
   ctx.restore();
 }
 
