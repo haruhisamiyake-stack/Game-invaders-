@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="10円玉を落として東京→新大阪。レバーを弾いて新幹線ルートを下る、税理士法人アストラストのミニゲーム。">
+<meta name="theme-color" content="#16233f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2316233f'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%23caa63a' stroke='%238a6a1f' stroke-width='4'/%3E%3Ctext x='32' y='41' font-size='20' font-family='sans-serif' fill='%237a5c18' text-anchor='middle'%3E10%3C/text%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:title" content="新幹線10円ゲーム｜税理士法人アストラスト">
+<meta property="og:description" content="10円玉を落として東京→新大阪。レバーで弾いて乗り継げ。">
+<meta property="og:url" content="https://shorui-invader.web.app/shinkansen.html">
+<meta property="og:image" content="https://shorui-invader.web.app/og.png?v=2">
+<meta name="twitter:card" content="summary_large_image">
+<title>新幹線10円ゲーム — 税理士法人アストラスト</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:#0e1730;color:#ede4d3;
+    font-family:"Yu Mincho","YuMincho","Hiragino Mincho ProN",serif;}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:10px;gap:8px;overflow:hidden;}
+  header{text-align:center;line-height:1.2}
+  header .ttl{font-size:clamp(16px,5vw,21px);letter-spacing:.12em;}
+  header .sub{margin-top:4px;font-size:10px;letter-spacing:.26em;color:#d8b45c;
+    font-family:system-ui,sans-serif;}
+  #wrap{position:relative;width:min(100%,420px);}
+  canvas{display:block;width:100%;height:auto;border:1px solid rgba(184,145,47,.55);
+    background:#16233f;touch-action:none;}
+  .hint{font-size:11px;letter-spacing:.04em;color:rgba(237,228,211,.6);
+    font-family:system-ui,sans-serif;text-align:center;}
+  .hint a{color:#d8b45c;}
+</style>
+</head>
+<body>
+<header>
+  <div class="ttl">新幹線10円ゲーム</div>
+  <div class="sub">ASTRUST TAX CORPORATION</div>
+</header>
+<div id="wrap"><canvas id="cv"></canvas></div>
+<div class="hint">タップ／スペースでレバーを弾き、次の駅へ乗り継ぐ<br><a href="./">← 書類インベーダーへ</a></div>
+
+<script>
+const W = 360, H = 600;
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let scale = 1;
+function resize(){
+  const cssW = cv.parentNode.clientWidth;
+  const cssH = cssW * H / W;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.style.height = cssH + 'px';
+  cv.width = Math.round(cssW * dpr);
+  cv.height = Math.round(cssH * dpr);
+  scale = cv.width / W;
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+}
+window.addEventListener('resize', resize);
+
+/* ---------- 駅とコース ---------- */
+const STATIONS = ['東京','品川','新横浜','小田原','静岡','名古屋','京都','新神戸','新大阪'];
+const RAMPS = STATIONS.length - 1;   // 8区間
+const M = 30, TOP = 96, GAP = 50, TILT = 8;
+function rampGeom(i){
+  const y = TOP + i * GAP;
+  const leftFirst = (i % 2 === 0);
+  const xEntry = leftFirst ? M : W - M;
+  const xExit  = leftFirst ? W - M : M;
+  return { y, xEntry, xExit, yEntry: y, yExit: y + TILT };
+}
+const CATCH = 0.74;   // レバーで拾える区間（坂の終盤）
+
+/* ---------- 状態 ---------- */
+let state = 'title';   // title | play | out | win
+let coin, score = 0, best = 0, leverFlash = 0, endT = 0, shake = 0;
+try{ best = +localStorage.getItem('shin_best') || 0; }catch(e){}
+
+function startGame(){
+  coin = { i: 0, t: 0, v: 0.011, leverCd: 0, spin: 0, drop: 0 };
+  score = 0; state = 'play'; leverFlash = 0; endT = 0; shake = 0;
+}
+
+/* ---------- 音 ---------- */
+let ac = null;
+function beep(freq, dur, type='square', vol=.05){
+  try{
+    if(!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    if(ac.state === 'suspended') ac.resume();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq; g.gain.value = vol;
+    o.connect(g); g.connect(ac.destination); o.start();
+    g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + dur);
+    o.stop(ac.currentTime + dur);
+  }catch(e){}
+}
+
+/* ---------- 入力 ---------- */
+function flip(){
+  if(ac && ac.state === 'suspended') ac.resume();
+  if(state === 'title' || state === 'out' || state === 'win'){ startGame(); return; }
+  if(state !== 'play' || coin.leverCd > 0) return;
+  leverFlash = 9;
+  if(coin.t >= CATCH){                 // 乗り継ぎ成功！
+    coin.i++;
+    score += 100 + coin.i * 20;
+    beep(660, .06, 'square', .05); beep(990, .08, 'triangle', .04);
+    if(coin.i >= RAMPS){                // 新大阪 到着
+      state = 'win'; endT = 0; shake = 12;
+      if(score > best){ best = score; try{ localStorage.setItem('shin_best', best); }catch(e){} }
+      beep(784,.5,'triangle',.06); beep(1046,.6,'triangle',.05);
+    } else {
+      coin.t = 0; coin.v = 0.011 + coin.i * 0.0016; coin.drop = 10;
+    }
+  } else {                              // 空振り＝レバーが戻るまで待ち
+    coin.leverCd = 15; beep(200, .05, 'sawtooth', .03);
+  }
+}
+cv.addEventListener('pointerdown', e => { e.preventDefault(); flip(); });
+addEventListener('keydown', e => {
+  if(e.code === 'Space' || e.code === 'Enter'){ e.preventDefault(); flip(); }
+});
+
+/* ---------- 更新 ---------- */
+function update(){
+  if(leverFlash > 0) leverFlash--;
+  if(shake > 0) shake--;
+  if(state === 'out' || state === 'win') endT++;
+  if(state !== 'play') return;
+  if(coin.leverCd > 0) coin.leverCd--;
+  if(coin.drop > 0) coin.drop--;
+  coin.v += 0.00020 + coin.i * 0.000035;   // だんだん加速（深いほど速い）
+  coin.t += coin.v;
+  coin.spin += coin.v * 22;
+  if(coin.t >= 1){                          // 拾えず落下＝アウト
+    state = 'out'; endT = 0; shake = 14; beep(140, .5, 'sawtooth', .06); beep(90, .6, 'square', .05);
+  }
+}
+
+/* ---------- 描画 ---------- */
+function coinPos(){
+  const g = rampGeom(coin.i);
+  const x = g.xEntry + (g.xExit - g.xEntry) * coin.t;
+  const y = g.yEntry + (g.yExit - g.yEntry) * coin.t - 11 - (coin.drop ? coin.drop : 0);
+  return { x, y, g };
+}
+function drawCoin(x, y){
+  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(coin.spin) * .12);
+  ctx.fillStyle = '#caa63a'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = '#8a6a1f'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#f2e2a8'; ctx.beginPath(); ctx.arc(0, 0, 7, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#7a5c18'; ctx.font = 'bold 8px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('10', 0, 1);
+  ctx.restore();
+}
+function draw(){
+  ctx.save();
+  if(shake > 0) ctx.translate((Math.random()-.5)*shake*.5, (Math.random()-.5)*shake*.5);
+  ctx.fillStyle = '#16233f'; ctx.fillRect(0, 0, W, H);
+
+  // 各坂（スイッチバック）
+  for(let i=0;i<RAMPS;i++){
+    const g = rampGeom(i);
+    ctx.strokeStyle = 'rgba(216,180,92,.9)'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(g.xEntry, g.yEntry); ctx.lineTo(g.xExit, g.yExit); ctx.stroke();
+    // 終端の穴（拾えないと落ちる）
+    ctx.fillStyle = '#0a1226';
+    ctx.beginPath(); ctx.arc(g.xExit, g.yExit + 12, 8, 0, 6.283); ctx.fill();
+    // 駅名（始端）
+    ctx.fillStyle = 'rgba(237,228,211,.85)'; ctx.font = '10px "Yu Mincho",serif';
+    ctx.textAlign = g.xEntry < W/2 ? 'left' : 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText(STATIONS[i], g.xEntry + (g.xEntry < W/2 ? 2 : -2), g.yEntry - 6);
+  }
+  // ゴール（新大阪）
+  const gg = rampGeom(RAMPS-1);
+  ctx.fillStyle = '#c0392b'; ctx.font = 'bold 12px "Yu Mincho",serif';
+  ctx.textAlign = gg.xExit < W/2 ? 'left' : 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('▶ '+STATIONS[RAMPS], gg.xExit + (gg.xExit < W/2 ? 2 : -2), gg.yExit + 20);
+
+  // レバー（現在の坂の終端）＋拾える合図
+  if(state === 'play'){
+    const g = rampGeom(coin.i);
+    const inZone = coin.t >= CATCH;
+    const lx = g.xExit + (g.xExit < W/2 ? -14 : 14);
+    ctx.strokeStyle = leverFlash > 0 ? '#f2e2a8' : (coin.leverCd > 0 ? 'rgba(150,150,150,.6)' : '#d8b45c');
+    ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(lx, g.yExit + 2);
+    ctx.lineTo(lx + (g.xExit < W/2 ? -10 : 10), g.yExit + 2 - (leverFlash > 0 ? 12 : 4));
+    ctx.stroke();
+    // 拾えるゾーンの光
+    if(inZone){
+      ctx.globalAlpha = .5 + .4*Math.sin(Date.now ? 0 : 0);
+      ctx.strokeStyle = 'rgba(122,224,160,.9)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(g.xExit, g.yExit, 16, 0, 6.283); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    const p = coinPos(); drawCoin(p.x, p.y);
+  }
+
+  // HUD
+  ctx.fillStyle = 'rgba(237,228,211,.85)'; ctx.font = '11px system-ui,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('SCORE ' + score, 8, H - 14);
+  ctx.textAlign = 'right';
+  ctx.fillText('BEST ' + best, W - 8, H - 14);
+  if(state === 'play'){
+    ctx.textAlign = 'center'; ctx.fillStyle = '#d8b45c';
+    ctx.fillText('現在地：' + STATIONS[coin.i] + '　→　' + STATIONS[coin.i+1], W/2, H - 14);
+  }
+
+  // オーバーレイ
+  if(state !== 'play'){
+    ctx.fillStyle = 'rgba(14,23,48,.82)'; ctx.fillRect(0, H/2-110, W, 220);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if(state === 'title'){
+      ctx.fillStyle = '#ede4d3'; ctx.font = '22px "Yu Mincho",serif';
+      ctx.fillText('新幹線10円ゲーム', W/2, H/2 - 66);
+      ctx.fillStyle = 'rgba(237,228,211,.8)'; ctx.font = '12px "Yu Mincho",serif';
+      ctx.fillText('10円玉を東京→新大阪へ', W/2, H/2 - 34);
+      ctx.fillStyle = '#7ae0a0'; ctx.font = '12px "Yu Mincho",serif';
+      ctx.fillText('緑の輪が出たら タップ！で乗り継ぎ', W/2, H/2 - 8);
+      ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '11px "Yu Mincho",serif';
+      ctx.fillText('外すとコインが落ちてアウト', W/2, H/2 + 16);
+      ctx.fillStyle = '#d8b45c'; ctx.font = '13px system-ui,sans-serif';
+      ctx.fillText('タップ / スペースで開始', W/2, H/2 + 56);
+    } else if(state === 'out'){
+      const fade = Math.min(1, endT/12);
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = '#c0392b'; ctx.font = 'bold 26px "Yu Mincho",serif';
+      ctx.fillText('アウト！', W/2, H/2 - 50);
+      ctx.fillStyle = '#ede4d3'; ctx.font = '14px "Yu Mincho",serif';
+      ctx.fillText('コインが落ちた…', W/2, H/2 - 18);
+      ctx.fillText('到達：' + STATIONS[coin.i], W/2, H/2 + 8);
+      ctx.fillStyle = '#d8b45c'; ctx.font = '15px system-ui,sans-serif';
+      ctx.fillText('SCORE ' + score, W/2, H/2 + 38);
+      ctx.fillStyle = 'rgba(237,228,211,.8)'; ctx.font = '12px system-ui,sans-serif';
+      ctx.fillText('タップでもう一度', W/2, H/2 + 70);
+      ctx.globalAlpha = 1;
+    } else if(state === 'win'){
+      const fade = Math.min(1, endT/14);
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = '#d8b45c'; ctx.font = 'bold 26px "Yu Mincho",serif';
+      ctx.fillText('大当たり！', W/2, H/2 - 54);
+      ctx.fillStyle = '#ede4d3'; ctx.font = '15px "Yu Mincho",serif';
+      ctx.fillText('新大阪に到着！', W/2, H/2 - 22);
+      ctx.fillStyle = '#7ae0a0'; ctx.font = '13px "Yu Mincho",serif';
+      ctx.fillText('10円が戻ってきた！', W/2, H/2 + 4);
+      ctx.fillStyle = '#d8b45c'; ctx.font = '15px system-ui,sans-serif';
+      ctx.fillText('SCORE ' + score, W/2, H/2 + 36);
+      ctx.fillStyle = 'rgba(237,228,211,.8)'; ctx.font = '12px system-ui,sans-serif';
+      ctx.fillText('タップでもう一度', W/2, H/2 + 68);
+      ctx.globalAlpha = 1;
+    }
+  }
+  // 左上バージョン
+  ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('shin v1', 5, 6);
+  ctx.restore();
+}
+
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+resize(); loop();
+</script>
+</body>
+</html>
