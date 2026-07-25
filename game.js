@@ -84,6 +84,7 @@ const ITEMS = [
   { k:'pierce', label:'貫', name:'貫通弾', col:'#e67e22' }    // 貫通弾（橙）
 ];
 const MAX_LIVES = 5, MAX_WINGS = 2;
+const STAGE_NAMES = ['', '領収書の山', '請求書の束', '帳簿の海', '年末調整', '確定申告'];
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
 const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
@@ -159,7 +160,7 @@ function reset(){
   wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
-  makeWave(1); state = 'play'; setMsg('第一面　申告書類の群れ', 90);
+  makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
 
@@ -366,7 +367,7 @@ function release(){
   beam = { x: player.x, w: 26 + p * 1.25, power: p, life: life, maxlife: life, acc: 0 };
   flash = 6; shake = Math.round(6 + p*.1);
   beep(420, .35, 'sawtooth', .06); beep(150, .5, 'square', .04);
-  if(p >= 85) setMsg('必殺　朱印一閃', 34);
+  if(p >= 85) setMsg('必殺　一括計算', 34);
 }
 
 function updateBeam(){
@@ -475,7 +476,7 @@ function updateSwarm(){
     }
     wave++; makeWave(wave); player.inv = 60;
     const kanji = ['', '一', '二', '三', '四', '五'][wave] || wave;
-    setMsg('第' + kanji + '面', 90);
+    setMsg('第' + kanji + '面　' + (STAGE_NAMES[wave] || ''), 90);
     return;
   }
   // 移動（残数が減るほど速く）
@@ -739,7 +740,7 @@ function drawGameOver(){
     ctx.translate(W/2, H*0.42); ctx.globalAlpha = land; ctx.scale(sc, sc); ctx.rotate(-0.14);
     ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 4; ctx.strokeRect(-40, -27, 80, 54);
     ctx.fillStyle = '#c0392b'; ctx.font = 'bold 30px "Yu Mincho",serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('却下', 0, 2);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('追徴', 0, 2);
     ctx.restore();
   }
   ctx.restore();
@@ -987,7 +988,7 @@ function drawMidBoss(b){
   ctx.strokeStyle = 'rgba(237,228,211,.7)'; ctx.lineWidth = 1;
   ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
   ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
-  ctx.textAlign = 'center'; ctx.fillText('中ボス　書類の魔物', W/2, by - 6);
+  ctx.textAlign = 'center'; ctx.fillText('中ボス　決算の魔物', W/2, by - 6);
 }
 function drawBoss(){
   const b = bossObj;
@@ -1158,7 +1159,7 @@ function drawHUD(){
   ctx.strokeRect(gx+.5, gy+.5, gw-1, 5);
   ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '8px system-ui,sans-serif';
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText('気力', gx, gy-7);
+  ctx.fillText('集中', gx, gy-7);
 
   ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(237,228,211,.85)';
@@ -1253,9 +1254,9 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v16', s:24, gap:30},
+      {t:'書類インベーダー　v17', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
-      {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
+      {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
       {t:'分身で僚機・貫通弾も', s:10, c:'#5aa9e6', gap:22},
       {t:'全5面。2面クリアで中ボス、最後にラスボス', s:11, c:'#d8b45c', gap:32},
@@ -1264,14 +1265,14 @@ function draw(){
     drawSeal(W/2, 128, 40);
   } else if(state === 'over'){
     center([
-      {t:'書類に埋もれた', s:22, gap:32},
+      {t:'申告漏れ…書類に埋もれた', s:19, gap:32},
       {t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32},
       {t:'タップでもう一度', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
     ]);
   } else if(state === 'win'){
     center([
       {t:'所長 撃破', s:24, c:'#d8b45c', gap:30},
-      {t:'すべての書類が受理されました', s:13, gap:30},
+      {t:'期限内に申告完了しました', s:13, gap:30},
       {t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32},
       {t:'タップで再挑戦', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
     ]);
@@ -1279,7 +1280,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v16', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v17', 5, 9);
   ctx.restore();
 }
 
