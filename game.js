@@ -50,6 +50,13 @@ let boss2Ready = false;
 boss2.onload = ()=> boss2Ready = true;
 boss2.src = "assets/boss2.png";
 
+// 第三形態（さらに復活。鼻からたま／ビーム）
+const boss3 = new Image();
+let boss3Ready = false;
+boss3.onload = ()=> boss3Ready = true;
+boss3.src = "assets/boss3.png";
+const NOSE_REL_Y = 0.695;   // スプライト上の鼻の縦位置（0=上,1=下）
+
 let state = 'title';       // title | play | clear | over | win
 let wave = 1, score = 0, lives = 3;
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
@@ -90,7 +97,7 @@ function makeBoss(){
   bossObj = { x: W/2, y: 110, w: 86, h: 94, hp: 70, max: 70, t: 0, cool: 60, hurt: 0, next: 55, phase: 1 };
 }
 
-// ボス撃破時：第一形態なら“本気の顔”で復活、第二形態なら勝利
+// ボス撃破時：第一→第二→第三形態と復活し、第三を倒すと勝利
 function bossDown(){
   const b = bossObj;
   if(b.phase === 1){
@@ -103,6 +110,16 @@ function bossDown(){
     setMsg('所長、本気の顔で復活', 130);
     beep(200, .5, 'sawtooth', .06); beep(300, .5, 'square', .05);
     // BGMはボス曲を継続（頭出しし直したい場合は bgmSet('boss', true)）
+  } else if(b.phase === 2){
+    b.phase = 3;
+    b.hp = b.max = 90;          // 第三形態はさらにHP増
+    b.next = b.max - 15;
+    b.hurt = 18; b.cool = 90;
+    b.t = 0;
+    b.beamState = 0; b.beamCool = 130; b.beamT = 0; b.beamX = b.x;   // 鼻ビーム初期化
+    score += 500; shake = 22; flash = 14;
+    setMsg('第三形態！鼻からたま・ビーム', 150);
+    beep(220, .5, 'sawtooth', .06); beep(330, .5, 'square', .05); beep(160, .6, 'triangle', .05);
   } else {
     state = 'win'; score += 1000; shake = 20; beep(880, .5, 'triangle', .06);
   }
@@ -425,23 +442,43 @@ function updateSwarm(){
 
 function updateBoss(){
   const b = bossObj;
-  b.t++;
+  const p3 = b.phase === 3;
+  b.t += p3 ? 2 : 1;                       // 第三形態は動きも約2倍速
   b.x = W/2 + Math.sin(b.t/60) * (W/2 - 60);
   b.y = 110 + Math.sin(b.t/95) * 22;
   if(b.hurt > 0) b.hurt--;
 
+  // 鼻の位置（第三形態の発射口）
+  const noseX = b.x, noseY = b.y + (NOSE_REL_Y - .5) * b.h;
+
   b.cool--;
   if(b.cool <= 0){
     const rage = b.hp < b.max/2;
-    b.cool = rage ? 42 : 62;
-    const n = rage ? 5 : 3;
-    for(let i=0;i<n;i++){
-      const a = Math.PI/2 + (i-(n-1)/2) * .28;
-      ebullets.push({ x: b.x, y: b.y + b.h/2 - 6,
-                      vx: Math.cos(a)*2.4, vy: Math.sin(a)*2.4, kind:1 });
+    if(p3){
+      // 鼻から「たま」を2倍速で自機方向へ扇状に放つ
+      b.cool = rage ? 24 : 36;
+      const n = rage ? 5 : 4;
+      const aim = Math.atan2(player.y - noseY, player.x - noseX);
+      for(let i=0;i<n;i++){
+        const a = aim + (i-(n-1)/2) * .30;
+        ebullets.push({ x: noseX, y: noseY,
+                        vx: Math.cos(a)*4.8, vy: Math.sin(a)*4.8, kind:1 });   // 4.8×1.5=7.2 ≒ 通常の2倍
+      }
+      beep(140, .1, 'sawtooth', .05);
+    } else {
+      b.cool = rage ? 42 : 62;
+      const n = rage ? 5 : 3;
+      for(let i=0;i<n;i++){
+        const a = Math.PI/2 + (i-(n-1)/2) * .28;
+        ebullets.push({ x: b.x, y: b.y + b.h/2 - 6,
+                        vx: Math.cos(a)*2.4, vy: Math.sin(a)*2.4, kind:1 });
+      }
+      beep(180, .12, 'sawtooth', .05);
     }
-    beep(180, .12, 'sawtooth', .05);
   }
+
+  // 第三形態：鼻からビーム（溜め→発射）
+  if(p3) updateNoseBeam(b, noseX, noseY);
 
   for(const bl of bullets){
     if(Math.abs(bl.x - b.x) < b.w/2 - 6 && Math.abs(bl.y - b.y) < b.h/2 - 6){
@@ -452,6 +489,31 @@ function updateBoss(){
     }
   }
   bullets = bullets.filter(bl => !bl.dead);
+}
+
+// 第三形態：鼻から縦ビーム（溜め→発射）。発射中に自機がライン上にいれば被弾
+function updateNoseBeam(b, noseX, noseY){
+  if(!b.beamState){
+    b.beamCool--;
+    if(b.beamCool <= 0){ b.beamState = 'charge'; b.beamT = 46; b.beamX = noseX; beep(320, .5, 'sine', .04); }
+    return;
+  }
+  b.beamT--;
+  if(b.beamState === 'charge'){
+    b.beamX = noseX;                       // 溜め中は鼻に追従（発射で固定）
+    if(b.beamT <= 0){ b.beamState = 'fire'; b.beamT = 36; shake = 12; beep(90, .5, 'sawtooth', .07); }
+  } else if(b.beamState === 'fire'){
+    if(player.inv <= 0 && Math.abs(player.x - b.beamX) < 13 && player.y > noseY){
+      if(player.shield){
+        player.shield = false; player.inv = 60; shake = 8;
+        setMsg('受理印が受け止めた', 26); beep(300, .18, 'triangle', .05);
+      } else {
+        lives--; player.inv = 90; shake = 16; beep(120, .3, 'sawtooth', .07);
+        if(lives <= 0){ state = 'over'; setMsg('', 0); }
+      }
+    }
+    if(b.beamT <= 0){ b.beamState = 0; b.beamCool = 150; }
+  }
 }
 
 /* ---------- 描画 ---------- */
@@ -485,16 +547,18 @@ function drawPlayer(){
 
 function drawBoss(){
   const b = bossObj;
-  const p2 = b.phase === 2;
-  const img = p2 ? boss2 : boss;
-  const ready = p2 ? boss2Ready : bossReady;
+  const p2 = b.phase === 2, p3 = b.phase === 3;
+  const img = p3 ? boss3 : (p2 ? boss2 : boss);
+  const ready = p3 ? boss3Ready : (p2 ? boss2Ready : bossReady);
+  const frameCol = p3 ? '#8e44ad' : '#c0392b';   // 第三形態は紫枠
   const x = b.x - b.w/2, y = b.y - b.h/2;
+  if(p3) drawNoseBeam(b);   // ビームは顔の背面から
   if(ready){
     if(b.hurt > 0){ ctx.globalAlpha = .55; }
     ctx.drawImage(img, x, y, b.w, b.h);
     ctx.globalAlpha = 1;
-    if(p2){   // 本気の顔は朱色の枠で囲う
-      ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2;
+    if(p2 || p3){   // 復活形態は枠で囲う
+      ctx.strokeStyle = frameCol; ctx.lineWidth = 2;
       ctx.strokeRect(x+1, y+1, b.w-2, b.h-2);
     }
   } else {
@@ -504,11 +568,32 @@ function drawBoss(){
   // HPバー
   const bw = 200, bx = (W-bw)/2, by = 26;
   ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(bx, by, bw, 8);
-  ctx.fillStyle = p2 ? '#c0392b' : '#b8912f'; ctx.fillRect(bx, by, bw * b.hp/b.max, 8);
+  ctx.fillStyle = p3 ? '#8e44ad' : (p2 ? '#c0392b' : '#b8912f'); ctx.fillRect(bx, by, bw * b.hp/b.max, 8);
   ctx.strokeStyle = 'rgba(237,228,211,.7)'; ctx.lineWidth = 1;
   ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
   ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
-  ctx.textAlign = 'center'; ctx.fillText(p2 ? '所長　三宅 晴久（本気）' : '所長　三宅 晴久', W/2, by - 6);
+  ctx.textAlign = 'center';
+  ctx.fillText(p3 ? '所長の秘蔵っ子　第三形態' : (p2 ? '所長　三宅 晴久（本気）' : '所長　三宅 晴久'), W/2, by - 6);
+}
+
+// 鼻からの縦ビーム描画（溜め＝細い警告線／発射＝太い光条）
+function drawNoseBeam(b){
+  if(!b.beamState) return;
+  const noseY = b.y + (NOSE_REL_Y - .5) * b.h, x = b.beamX;
+  ctx.save();
+  if(b.beamState === 'charge'){
+    const a = .3 + .5 * Math.abs(Math.sin(frame/4));
+    ctx.strokeStyle = 'rgba(142,68,173,' + a + ')'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, noseY); ctx.lineTo(x, H); ctx.stroke();
+  } else {
+    const g = ctx.createLinearGradient(x-13, 0, x+13, 0);
+    g.addColorStop(0, 'rgba(142,68,173,0)');
+    g.addColorStop(.5, 'rgba(200,140,240,.92)');
+    g.addColorStop(1, 'rgba(142,68,173,0)');
+    ctx.fillStyle = g; ctx.fillRect(x-13, noseY, 26, H-noseY);
+    ctx.fillStyle = 'rgba(255,245,255,.95)'; ctx.fillRect(x-2.5, noseY, 5, H-noseY);
+  }
+  ctx.restore();
 }
 
 function drawBeam(){
@@ -735,7 +820,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v2', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v3', 5, 9);
   ctx.restore();
 }
 
