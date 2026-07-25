@@ -1289,8 +1289,18 @@ function draw(){
       else { ctx.fillStyle = '#3fd0e6'; ctx.fillRect(b.x-2, b.y-5, 4, 10); }        // 通常弾（シアン）
     });
     ebullets.forEach(b=>{
-      ctx.fillStyle = b.kind ? '#c0392b' : 'rgba(237,228,211,.9)';
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.kind ? 4 : 3, 0, Math.PI*2); ctx.fill();
+      if(b.kind){
+        // ボス弾：明るい赤＋光背＋白い芯で背景から浮かせる
+        ctx.fillStyle = 'rgba(255,90,90,.30)';
+        ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ff5252';
+        ctx.beginPath(); ctx.arc(b.x, b.y, 4.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffe6cc';
+        ctx.beginPath(); ctx.arc(b.x, b.y, 1.8, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.fillStyle = 'rgba(237,228,211,.95)';
+        ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI*2); ctx.fill();
+      }
     });
     drawMissiles();
     items.forEach(drawItem);
@@ -1324,7 +1334,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v22', s:24, gap:30},
+      {t:'書類インベーダー　v23', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1350,7 +1360,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v22', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v23', 5, 9);
   ctx.restore();
 }
 
