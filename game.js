@@ -70,6 +70,7 @@ let missiles = [];   // ボスの誘導ミサイル
 let midDone = false;   // 中ボスを倒したか
 let introT = 0, introMax = 0, introBlots = [];   // ラスボス登場演出
 let morphT = 0, morphMax = 0, morphBlots = [], morphCol = '#c0392b', morphInk = '#4e0a0c';   // 形態変化演出
+let overT = 0, overMax = 0, overParts = [], deadX = 0, deadY = 0;   // ゲームオーバー演出
 let dir = 1, stepTimer = 0, shake = 0;
 let ki = 0, charge = 0, beam = null, kbCharge = false, frame = 0, flash = 0;
 let items = [];
@@ -156,7 +157,7 @@ function bossDown(){
 }
 
 function reset(){
-  wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0;
+  wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　申請書類の群れ', 90);
@@ -407,6 +408,7 @@ function update(){
   if(state !== 'play') return;
   if(introT > 0){ updateIntro(); return; }   // ラスボス登場演出（インクブリード）中は進行停止
   if(morphT > 0){ morphT--; return; }        // 形態変化演出中は進行停止
+  if(overT > 0){ updateGameOver(); return; } // ゲームオーバー演出中
 
   // 気力：時間で少し、書類を捌くと多く回復
   ki = Math.min(100, ki + .05);
@@ -464,7 +466,7 @@ function update(){
         setMsg('受理印が受け止めた', 26); beep(300,.18,'triangle',.05);
       } else {
         lives--; player.inv = 90; shake = 14; beep(120,.3,'sawtooth',.07);
-        if(lives <= 0){ state = 'over'; setMsg('', 0); }
+        if(lives <= 0){ gameOver(); }
       }
     }
   }
@@ -505,7 +507,7 @@ function updateSwarm(){
     beep(160 + live.length, .04, 'triangle', .02);
     // 最前列到達
     for(const e of live){
-      if(e.y > H - 70){ state = 'over'; return; }
+      if(e.y > H - 70){ gameOver(); return; }
     }
   }
   // 敵の発射
@@ -704,6 +706,56 @@ function drawIntro(){
   ctx.restore();
 }
 
+/* ---------- ゲームオーバー演出（自機爆散→「却下」朱印） ---------- */
+function gameOver(){
+  if(overT > 0 || state !== 'play') return;
+  overMax = overT = 120;
+  deadX = player.x; deadY = player.y;
+  ebullets = []; missiles = []; charge = 0; beam = null;   // 進行を止めて見せ場に
+  overParts = [];
+  for(let i=0;i<20;i++){
+    const a = Math.random()*6.283, sp = 1.4 + Math.random()*3.6;
+    overParts.push({ x: deadX, y: deadY, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 1.2,
+                     r: 2 + Math.random()*3, life: 40 + Math.random()*30,
+                     col: Math.random() < .5 ? '#c0392b' : '#ede4d3' });   // 墨と紙片
+  }
+  flash = 10; shake = 18;
+  beep(140, .5, 'sawtooth', .07); beep(80, .7, 'square', .05);
+}
+function updateGameOver(){
+  overT--;
+  const t = overMax - overT;
+  for(const p of overParts){ p.x += p.vx; p.y += p.vy; p.vy += .13; p.life--; }
+  overParts = overParts.filter(p => p.life > 0);
+  if(t === 40){ shake = 14; flash = 6; beep(120, .5, 'sawtooth', .06); }   // 「却下」着地
+  if(overT <= 0){ state = 'over'; setMsg('', 0); }
+}
+function drawGameOver(){
+  const t = overMax - overT;
+  ctx.save();
+  // 自機の爆散（墨と紙片）
+  for(const p of overParts){
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.life/20));
+    ctx.fillStyle = p.col; ctx.fillRect(p.x - p.r, p.y - p.r, p.r*2, p.r*2);
+  }
+  ctx.globalAlpha = 1;
+  // 画面を墨で暗く
+  ctx.globalAlpha = Math.min(.62, Math.max(0, (t-28)/55));
+  ctx.fillStyle = '#1a0405'; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+  // 「却下」の朱印が斜めに振り下ろされる
+  if(t >= 34){
+    const land = Math.min(1, (t-34)/12), sc = 3 - 2*land;
+    ctx.save();
+    ctx.translate(W/2, H*0.42); ctx.globalAlpha = land; ctx.scale(sc, sc); ctx.rotate(-0.14);
+    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 4; ctx.strokeRect(-40, -27, 80, 54);
+    ctx.fillStyle = '#c0392b'; ctx.font = 'bold 30px "Yu Mincho",serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('却下', 0, 2);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 /* ---------- 形態変化演出（ボスから墨が弾ける） ---------- */
 function startMorph(toPhase){
   morphMax = morphT = 66;
@@ -768,7 +820,7 @@ function updateNoseBeam(b, noseX, noseY){
         setMsg('受理印が受け止めた', 26); beep(300, .18, 'triangle', .05);
       } else {
         lives--; player.inv = 90; shake = 16; beep(120, .3, 'sawtooth', .07);
-        if(lives <= 0){ state = 'over'; setMsg('', 0); }
+        if(lives <= 0){ gameOver(); }
       }
     }
     if(b.beamT <= 0){ b.beamState = 0; b.beamCool = 150; }
@@ -829,7 +881,7 @@ function updateMissiles(){
         setMsg('受理印が受け止めた', 26); beep(300, .18, 'triangle', .05);
       } else {
         lives--; player.inv = 90; shake = 15; beep(120, .3, 'sawtooth', .07);
-        if(lives <= 0){ state = 'over'; setMsg('', 0); }
+        if(lives <= 0){ gameOver(); }
       }
     }
     // 自弾で撃墜（重装甲は2発必要）
@@ -921,6 +973,7 @@ function drawSealShip(x, y, scale, alpha){
   ctx.restore();
 }
 function drawPlayer(){
+  if(overT > 0) return;   // ゲームオーバー演出中は自機は爆散済み
   const blink = player.inv > 0 && Math.floor(player.inv/5) % 2;
   // 分身（僚機）を左右に描画（本体点滅中も表示）
   for(const wx of wingOffsets()){
@@ -1218,6 +1271,7 @@ function draw(){
     drawHUD();
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
     if(morphT > 0) drawMorph();   // 形態変化演出
+    if(overT > 0) drawGameOver(); // ゲームオーバー演出
     if(flash > 0){
       ctx.globalAlpha = flash/12; ctx.fillStyle = '#ede4d3';
       ctx.fillRect(0,0,W,H); ctx.globalAlpha = 1;
@@ -1231,7 +1285,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v14', s:24, gap:30},
+      {t:'書類インベーダー　v15', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1257,7 +1311,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v14', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v15', 5, 9);
   ctx.restore();
 }
 
