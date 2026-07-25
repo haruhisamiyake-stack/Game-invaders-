@@ -82,7 +82,7 @@ const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍
 function newPlayer(){
   return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
            sub: 0, subT: 0, rapidT: 0, shield: false,
-           wings: 0, pierceT: 0 };
+           wings: 0, pierceT: 0, inkT: 0 };
 }
 
 function makeWave(n){
@@ -274,14 +274,15 @@ function wingOffsets(){
 function shoot(){
   if(player.cool > 0 || charge > 0 || state !== 'play') return;
   const pierce = player.pierceT > 0;
+  const ink = player.inkT > 0, dmg = ink ? 2 : 1;   // 朱肉で強化弾（威力2）
   const n = 1 + player.sub * 2;               // 副印で2WAY→3WAY→5WAY
   for(let i=0;i<n;i++){
     const off = (i - (n-1)/2);
-    bullets.push({ x: player.x + off*4, y: player.y - 12, w: 4, h: 10, vx: off*1.5, pierce });
+    bullets.push({ x: player.x + off*4, y: player.y - 12, w: 4, h: 10, vx: off*1.5, pierce, dmg, ink });
   }
   // 分身（僚機）はまっすぐ1発ずつ援護射撃
   for(const wx of wingOffsets()){
-    bullets.push({ x: player.x + wx, y: player.y - 8, w: 4, h: 10, vx: 0, pierce });
+    bullets.push({ x: player.x + wx, y: player.y - 8, w: 4, h: 10, vx: 0, pierce, dmg, ink });
   }
   player.cool = player.rapidT > 0 ? 7 : 14;     // 速筆で連射
   beep(880, .06, 'square', .04);
@@ -306,7 +307,13 @@ function pickUp(it){
   const d = ITEMS[it.kind];
   if(d.k === 'sub'){        player.sub = Math.min(2, player.sub + 1); player.subT = 900; }
   else if(d.k === 'rapid'){ player.rapidT = 780; }
-  else if(d.k === 'ink'){   ki = 100; }
+  else if(d.k === 'ink'){
+    ki = 100;                 // 必殺ゲージ満タン
+    player.inkT = 600;        // 一定時間、朱の強化弾（大きく・威力2）
+    setMsg('朱肉　必殺満タン＋強化弾', 30);
+    beep(700, .08, 'triangle', .05); beep(1050, .1, 'triangle', .04);
+    return;
+  }
   else if(d.k === 'shield'){ player.shield = true; }
   else if(d.k === 'heal'){
     if(lives < MAX_LIVES){ lives++; setMsg('回復薬　ライフ＋1', 30); }
@@ -334,6 +341,7 @@ function updateItems(){
   if(player.subT > 0 && --player.subT === 0) player.sub = 0;
   if(player.rapidT > 0) player.rapidT--;
   if(player.pierceT > 0) player.pierceT--;
+  if(player.inkT > 0) player.inkT--;
 }
 
 /* ---------- 必殺・朱印一閃 ---------- */
@@ -482,7 +490,7 @@ function updateSwarm(){
     for(const e of live){
       if(e.alive && Math.abs(b.x - e.x) < e.w/2 + 2 && Math.abs(b.y - e.y) < e.h/2 + 4){
         if(!b.pierce) b.dead = true;
-        e.hp--;
+        e.hp -= (b.dmg || 1);
         if(e.hp <= 0){                              // 撃破
           e.alive = false; score += e.pt;
           ki = Math.min(100, ki + 6); maybeDrop(e.x, e.y);
@@ -557,7 +565,7 @@ function updateBoss(){
 
   for(const bl of bullets){
     if(Math.abs(bl.x - b.x) < b.w/2 - 6 && Math.abs(bl.y - b.y) < b.h/2 - 6){
-      bl.dead = true; b.hp--; b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
+      bl.dead = true; b.hp -= (bl.dmg || 1); b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
       if(b.hp <= b.next){ b.next -= 15; maybeDrop(b.x, b.y + 30, 1); }
       beep(660, .04, 'square', .03);
       if(b.hp <= 0){ bossDown(); break; }
@@ -909,6 +917,7 @@ function drawChips(){
   const on = [];
   if(player.sub > 0)     on.push({ d: ITEMS[0], t: player.subT/900,   n: 1 + player.sub*2 });
   if(player.rapidT > 0)  on.push({ d: ITEMS[1], t: player.rapidT/780 });
+  if(player.inkT > 0)    on.push({ d: ITEMS[2], t: player.inkT/600 });
   if(player.shield)      on.push({ d: ITEMS[3], t: 1 });
   if(player.wings > 0)   on.push({ d: ITEMS[5], t: 1, tag: player.wings + '機' });
   if(player.pierceT > 0) on.push({ d: ITEMS[6], t: player.pierceT/660 });
@@ -989,8 +998,10 @@ function draw(){
     if(bossObj) drawBoss();
     else enemies.filter(e=>e.alive).forEach(drawDoc);
 
-    ctx.fillStyle = '#d8b45c';
-    bullets.forEach(b => ctx.fillRect(b.x-2, b.y-5, 4, 10));
+    bullets.forEach(b => {
+      if(b.ink){ ctx.fillStyle = '#c0392b'; ctx.fillRect(b.x-3, b.y-7, 6, 14); }   // 朱の強化弾
+      else { ctx.fillStyle = '#d8b45c'; ctx.fillRect(b.x-2, b.y-5, 4, 10); }
+    });
     ebullets.forEach(b=>{
       ctx.fillStyle = b.kind ? '#c0392b' : 'rgba(237,228,211,.9)';
       ctx.beginPath(); ctx.arc(b.x, b.y, b.kind ? 4 : 3, 0, Math.PI*2); ctx.fill();
@@ -1024,7 +1035,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v10', s:24, gap:30},
+      {t:'書類インベーダー　v11', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1050,7 +1061,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v10', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v11', 5, 9);
   ctx.restore();
 }
 
