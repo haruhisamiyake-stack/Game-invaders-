@@ -44,6 +44,12 @@ let bossReady = false;
 boss.onload = ()=> bossReady = true;
 boss.src = BOSS_SRC;
 
+// 第二形態（撃破後に復活する“本気の顔”）
+const boss2 = new Image();
+let boss2Ready = false;
+boss2.onload = ()=> boss2Ready = true;
+boss2.src = "assets/boss2.png";
+
 let state = 'title';       // title | play | clear | over | win
 let wave = 1, score = 0, lives = 3;
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
@@ -58,6 +64,7 @@ const ITEMS = [
 ];
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
 const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
+const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
 
 function newPlayer(){
   return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
@@ -80,7 +87,25 @@ function makeWave(n){
 }
 
 function makeBoss(){
-  bossObj = { x: W/2, y: 110, w: 86, h: 94, hp: 70, max: 70, t: 0, cool: 60, hurt: 0, next: 55 };
+  bossObj = { x: W/2, y: 110, w: 86, h: 94, hp: 70, max: 70, t: 0, cool: 60, hurt: 0, next: 55, phase: 1 };
+}
+
+// ボス撃破時：第一形態なら“本気の顔”で復活、第二形態なら勝利
+function bossDown(){
+  const b = bossObj;
+  if(b.phase === 1){
+    b.phase = 2;
+    b.hp = b.max = 80;          // 第二形態はHP増
+    b.next = b.max - 15;
+    b.hurt = 16; b.cool = 100;  // 復活直後は少し間を置く
+    b.t = 0;
+    score += 300; shake = 18; flash = 12;
+    setMsg('所長、本気の顔で復活', 130);
+    beep(200, .5, 'sawtooth', .06); beep(300, .5, 'square', .05);
+    // BGMはボス曲を継続（頭出しし直したい場合は bgmSet('boss', true)）
+  } else {
+    state = 'win'; score += 1000; shake = 20; beep(880, .5, 'triangle', .06);
+  }
 }
 
 function reset(){
@@ -248,7 +273,7 @@ function updateBeam(){
       while(b.acc >= 1 && bossObj.hp > 0){ b.acc--; bossObj.hp--; score += 5; }
       if(bossObj.hp <= bossObj.next){ bossObj.next -= 15; maybeDrop(bossObj.x, bossObj.y + 30, 1); }
       bossObj.hurt = 4;
-      if(bossObj.hp <= 0 && state === 'play'){ state = 'win'; score += 1000; shake = 20; beep(880,.5,'triangle',.06); }
+      if(bossObj.hp <= 0 && state === 'play'){ bossDown(); }
     }
   } else {
     for(const e of enemies){
@@ -305,8 +330,8 @@ function update(){
   bullets.forEach(b => { b.y -= 7; b.x += b.vx || 0; });
   bullets = bullets.filter(b => b.y > -12 && b.x > -8 && b.x < W+8);
 
-  // 敵弾
-  ebullets.forEach(b => { b.y += b.vy; b.x += b.vx || 0; });
+  // 敵弾（球速1.5倍）
+  ebullets.forEach(b => { b.y += b.vy * EBULLET_SPEED; b.x += (b.vx || 0) * EBULLET_SPEED; });
   ebullets = ebullets.filter(b => b.y < H+10 && b.x > -10 && b.x < W+10);
 
   if(bossObj) updateBoss(); else updateSwarm();
@@ -399,7 +424,7 @@ function updateBoss(){
       bl.dead = true; b.hp--; b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
       if(b.hp <= b.next){ b.next -= 15; maybeDrop(b.x, b.y + 30, 1); }
       beep(660, .04, 'square', .03);
-      if(b.hp <= 0){ state = 'win'; score += 1000; shake = 20; beep(880,.5,'triangle',.06); }
+      if(b.hp <= 0){ bossDown(); break; }
     }
   }
   bullets = bullets.filter(bl => !bl.dead);
@@ -436,22 +461,30 @@ function drawPlayer(){
 
 function drawBoss(){
   const b = bossObj;
-  if(bossReady){
+  const p2 = b.phase === 2;
+  const img = p2 ? boss2 : boss;
+  const ready = p2 ? boss2Ready : bossReady;
+  const x = b.x - b.w/2, y = b.y - b.h/2;
+  if(ready){
     if(b.hurt > 0){ ctx.globalAlpha = .55; }
-    ctx.drawImage(boss, b.x - b.w/2, b.y - b.h/2, b.w, b.h);
+    ctx.drawImage(img, x, y, b.w, b.h);
     ctx.globalAlpha = 1;
+    if(p2){   // 本気の顔は朱色の枠で囲う
+      ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2;
+      ctx.strokeRect(x+1, y+1, b.w-2, b.h-2);
+    }
   } else {
     ctx.fillStyle = '#ede4d3';
-    ctx.fillRect(b.x-b.w/2, b.y-b.h/2, b.w, b.h);
+    ctx.fillRect(x, y, b.w, b.h);
   }
   // HPバー
   const bw = 200, bx = (W-bw)/2, by = 26;
   ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(bx, by, bw, 8);
-  ctx.fillStyle = '#b8912f'; ctx.fillRect(bx, by, bw * b.hp/b.max, 8);
+  ctx.fillStyle = p2 ? '#c0392b' : '#b8912f'; ctx.fillRect(bx, by, bw * b.hp/b.max, 8);
   ctx.strokeStyle = 'rgba(237,228,211,.7)'; ctx.lineWidth = 1;
   ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
   ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
-  ctx.textAlign = 'center'; ctx.fillText('所長　三宅 晴久', W/2, by - 6);
+  ctx.textAlign = 'center'; ctx.fillText(p2 ? '所長　三宅 晴久（本気）' : '所長　三宅 晴久', W/2, by - 6);
 }
 
 function drawBeam(){
