@@ -71,6 +71,7 @@ let midDone = false;   // 中ボスを倒したか
 let introT = 0, introMax = 0, introBlots = [];   // ラスボス登場演出
 let morphT = 0, morphMax = 0, morphBlots = [], morphCol = '#c0392b', morphInk = '#4e0a0c';   // 形態変化演出
 let overT = 0, overMax = 0, overParts = [], deadX = 0, deadY = 0;   // ゲームオーバー演出
+let winT = 0, winMax = 0;   // クリア演出（暗転→しっかり納税）
 let dir = 1, stepTimer = 0, shake = 0;
 let ki = 0, charge = 0, beam = null, kbCharge = false, frame = 0, flash = 0;
 let items = [];
@@ -152,12 +153,12 @@ function bossDown(){
     beep(220, .5, 'sawtooth', .06); beep(330, .5, 'square', .05); beep(160, .6, 'triangle', .05);
     startMorph(3);   // 変身演出（紫の墨）
   } else {
-    state = 'win'; score += 1000; shake = 20; beep(880, .5, 'triangle', .06);
+    startWinSeq();   // クリア演出（暗転→しっかり納税）
   }
 }
 
 function reset(){
-  wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0;
+  wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -404,6 +405,7 @@ function update(){
   if(introT > 0){ updateIntro(); return; }   // ラスボス登場演出（インクブリード）中は進行停止
   if(morphT > 0){ morphT--; return; }        // 形態変化演出中は進行停止
   if(overT > 0){ updateGameOver(); return; } // ゲームオーバー演出中
+  if(winT > 0){ updateWinSeq(); return; }    // クリア演出中
 
   // 気力：時間で少し、書類を捌くと多く回復
   ki = Math.min(100, ki + .05);
@@ -742,6 +744,45 @@ function drawGameOver(){
     ctx.fillStyle = '#c0392b'; ctx.font = 'bold 30px "Yu Mincho",serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('追徴', 0, 2);
     ctx.restore();
+  }
+  ctx.restore();
+}
+
+/* ---------- クリア演出（暗転→しっかり納税） ---------- */
+function startWinSeq(){
+  winMax = winT = 160;
+  score += 1000;
+  ebullets = []; missiles = []; bullets = []; charge = 0; beam = null;
+  flash = 12; shake = 22;
+  beep(880, .5, 'triangle', .06); beep(1320, .5, 'triangle', .05);
+}
+function updateWinSeq(){
+  winT--;
+  const t = winMax - winT;
+  if(t === 26){ beep(150, .7, 'sine', .05); }                       // 暗転
+  if(t === 64){ shake = 6; beep(520, .6, 'triangle', .05); beep(784, .7, 'triangle', .045); }  // 納税の文字
+  if(winT <= 0){ state = 'win'; }
+}
+function drawWinSeq(){
+  const t = winMax - winT;
+  ctx.save();
+  // だんだん真っ暗に
+  const dark = Math.min(1, Math.max(0, (t-16)/44));
+  ctx.globalAlpha = dark; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+  // 闇の中から「しっかり納税」
+  if(t >= 64){
+    const a = Math.min(1, (t-64)/26);
+    const g = ctx.createRadialGradient(W/2, H*0.42, 4, W/2, H*0.42, 130);
+    g.addColorStop(0, 'rgba(216,180,92,' + (0.20*a) + ')'); g.addColorStop(1, 'rgba(216,180,92,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#ecdcac'; ctx.font = 'bold 30px "Yu Mincho",serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('しっかり納税', W/2, H*0.42);
+    ctx.font = '11px "Yu Mincho",serif'; ctx.fillStyle = 'rgba(216,180,92,' + a + ')';
+    ctx.fillText('― 税理士法人アストラスト ―', W/2, H*0.42 + 30);
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 }
@@ -1250,6 +1291,7 @@ function draw(){
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
     if(morphT > 0) drawMorph();   // 形態変化演出
     if(overT > 0) drawGameOver(); // ゲームオーバー演出
+    if(winT > 0) drawWinSeq();    // クリア演出
     if(flash > 0){
       ctx.globalAlpha = flash/12; ctx.fillStyle = '#ede4d3';
       ctx.fillRect(0,0,W,H); ctx.globalAlpha = 1;
@@ -1263,7 +1305,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v20', s:24, gap:30},
+      {t:'書類インベーダー　v21', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1289,7 +1331,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v20', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v21', 5, 9);
   ctx.restore();
 }
 
