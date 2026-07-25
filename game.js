@@ -57,10 +57,17 @@ boss3.onload = ()=> boss3Ready = true;
 boss3.src = "assets/boss3.png";
 const NOSE_REL_Y = 0.695;   // スプライト上の鼻の縦位置（0=上,1=下）
 
+// 中ボス（2面クリア後に出現するイカ型の魔物）
+const midboss = new Image();
+let midbossReady = false;
+midboss.onload = ()=> midbossReady = true;
+midboss.src = "assets/midboss.png";
+
 let state = 'title';       // title | play | clear | over | win
 let wave = 1, score = 0, lives = 3;
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
+let midDone = false;   // 中ボスを倒したか
 let dir = 1, stepTimer = 0, shake = 0;
 let ki = 0, charge = 0, beam = null, kbCharge = false, frame = 0, flash = 0;
 let items = [];
@@ -104,8 +111,16 @@ function makeWave(n){
   dir = 1; stepTimer = 0;
 }
 
-function makeBoss(){
-  bossObj = { x: W/2, y: 110, w: 86, h: 94, hp: 70, max: 70, t: 0, cool: 60, hurt: 0, next: 55, phase: 1 };
+function makeBoss(type){
+  if(type === 'mid'){
+    // 中ボス：単形態。復活なし、鼻ビームなし
+    bossObj = { type: 'mid', x: W/2, y: 96, w: 96, h: 73, hp: 50, max: 50,
+                t: 0, cool: 70, hurt: 0, next: 35, mslCool: 130 };
+  } else {
+    // ラスボス（所長）：3段階
+    bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 70, max: 70,
+                t: 0, cool: 60, hurt: 0, next: 55, phase: 1 };
+  }
 }
 
 // ボス撃破時：第一→第二→第三形態と復活し、第三を倒すと勝利
@@ -137,10 +152,10 @@ function bossDown(){
 }
 
 function reset(){
-  wave = 1; score = 0; lives = 3;
+  wave = 1; score = 0; lives = 3; midDone = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
-  makeWave(1); state = 'play'; setMsg('第一波　申請書類の群れ', 90);
+  makeWave(1); state = 'play'; setMsg('第一面　申請書類の群れ', 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
 
@@ -364,7 +379,7 @@ function updateBeam(){
       while(b.acc >= 1 && bossObj.hp > 0){ b.acc--; bossObj.hp--; score += 5; }
       if(bossObj.hp <= bossObj.next){ bossObj.next -= 15; maybeDrop(bossObj.x, bossObj.y + 30, 1); }
       bossObj.hurt = 4;
-      if(bossObj.hp <= 0 && state === 'play'){ bossDown(); }
+      if(bossObj.hp <= 0 && state === 'play'){ bossObj.type === 'mid' ? midDefeated() : bossDown(); }
     }
   } else {
     for(const e of enemies){
@@ -453,9 +468,18 @@ function update(){
 function updateSwarm(){
   const live = enemies.filter(e => e.alive);
   if(live.length === 0){
-    if(wave >= 3){ makeBoss(); setMsg('最終波　所長が出てきた', 120); beep(200,.5,'sawtooth',.06); bgmSet('boss', true); }
-    else { wave++; makeWave(wave); player.inv = 60;
-           setMsg(wave === 2 ? '第二波　書類が増えた' : '第三波', 90); }
+    // 進行：1面→2面→中ボス→3面→4面→5面→ラスボス
+    if(wave === 2 && !midDone){
+      makeBoss('mid'); setMsg('中ボス出現　書類の魔物', 120);
+      beep(200,.5,'sawtooth',.06); bgmSet('boss', true); return;
+    }
+    if(wave >= 5){
+      makeBoss('last'); setMsg('最終面　所長が出てきた', 120);
+      beep(200,.5,'sawtooth',.06); bgmSet('boss', true); return;
+    }
+    wave++; makeWave(wave); player.inv = 60;
+    const kanji = ['', '一', '二', '三', '四', '五'][wave] || wave;
+    setMsg('第' + kanji + '面', 90);
     return;
   }
   // 移動（残数が減るほど速く）
@@ -508,6 +532,7 @@ function updateSwarm(){
 
 function updateBoss(){
   const b = bossObj;
+  if(b.type === 'mid'){ updateMidBoss(b); return; }
   const p3 = b.phase === 3;
   b.t += p3 ? 2 : 1;                       // 第三形態は動きも約2倍速
   b.x = W/2 + Math.sin(b.t/60) * (W/2 - 60);
@@ -572,6 +597,54 @@ function updateBoss(){
     }
   }
   bullets = bullets.filter(bl => !bl.dead);
+}
+
+// 中ボス：単形態。扇状の弾＋たまに誘導ミサイル。倒すと第三面へ
+function updateMidBoss(b){
+  b.t++;
+  b.x = W/2 + Math.sin(b.t/55) * (W/2 - 55);
+  b.y = 96 + Math.sin(b.t/80) * 14;
+  if(b.hurt > 0) b.hurt--;
+
+  b.cool--;
+  if(b.cool <= 0){
+    const rage = b.hp < b.max/2;
+    b.cool = rage ? 40 : 62;
+    const n = rage ? 4 : 3;
+    for(let i=0;i<n;i++){
+      const a = Math.PI/2 + (i-(n-1)/2) * .3;
+      ebullets.push({ x: b.x, y: b.y + b.h/2 - 4, vx: Math.cos(a)*2.4, vy: Math.sin(a)*2.4, kind:1 });
+    }
+    beep(200, .1, 'sawtooth', .05);
+  }
+  // たまに誘導ミサイル
+  b.mslCool--;
+  if(b.mslCool <= 0){
+    b.mslCool = 150;
+    const aim = Math.atan2(player.y - b.y, player.x - b.x);
+    spawnMissile(b.x, b.y + b.h/2 - 4, 'homing', aim, false);
+    beep(520, .12, 'square', .04);
+  }
+  // 命中判定
+  for(const bl of bullets){
+    if(Math.abs(bl.x - b.x) < b.w/2 - 8 && Math.abs(bl.y - b.y) < b.h/2 - 8){
+      bl.dead = true; b.hp -= (bl.dmg || 1); b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
+      if(b.hp <= b.next){ b.next -= 12; maybeDrop(b.x, b.y + 20, 1); }
+      beep(660, .04, 'square', .03);
+      if(b.hp <= 0){ midDefeated(); break; }
+    }
+  }
+  bullets = bullets.filter(bl => !bl.dead);
+}
+
+// 中ボス撃破 → 第三面へ
+function midDefeated(){
+  score += 500; shake = 18; flash = 12;
+  setMsg('中ボス撃破！　第三面へ', 120);
+  beep(660, .4, 'triangle', .06); beep(990, .3, 'triangle', .05);
+  midDone = true; bossObj = null; missiles = [];
+  wave = 3; makeWave(3); player.inv = 90;
+  bgmSet('normal', true);   // 通常曲へ戻す
 }
 
 // 第三形態：鼻から縦ビーム（溜め→発射）。発射中に自機がライン上にいれば被弾
@@ -754,8 +827,26 @@ function drawPlayer(){
   drawSealShip(player.x, player.y, 1, 1);
 }
 
+function drawMidBoss(b){
+  const x = b.x - b.w/2, y = b.y - b.h/2;
+  if(midbossReady){
+    if(b.hurt > 0) ctx.globalAlpha = .55;
+    ctx.drawImage(midboss, x, y, b.w, b.h);
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = '#7a4fb0'; ctx.fillRect(x, y, b.w, b.h);
+  }
+  const bw = 200, bx = (W-bw)/2, by = 26;
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(bx, by, bw, 8);
+  ctx.fillStyle = '#8e44ad'; ctx.fillRect(bx, by, bw * b.hp/b.max, 8);
+  ctx.strokeStyle = 'rgba(237,228,211,.7)'; ctx.lineWidth = 1;
+  ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
+  ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.fillText('中ボス　書類の魔物', W/2, by - 6);
+}
 function drawBoss(){
   const b = bossObj;
+  if(b.type === 'mid'){ drawMidBoss(b); return; }
   const p2 = b.phase === 2, p3 = b.phase === 3;
   const img = p3 ? boss3 : (p2 ? boss2 : boss);
   const ready = p3 ? boss3Ready : (p2 ? boss2Ready : bossReady);
@@ -949,7 +1040,7 @@ function drawHUD(){
   ctx.font = '11px system-ui,sans-serif';
   ctx.textAlign = 'left';  ctx.fillText('SCORE ' + score, 8, H-12);
   ctx.textAlign = 'right';
-  ctx.fillText(bossObj ? 'FINAL' : 'WAVE ' + wave, W-8, H-12);
+  ctx.fillText(bossObj ? (bossObj.type === 'mid' ? 'MID BOSS' : 'FINAL') : 'STAGE ' + wave + '/5', W-8, H-12);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#c0392b';
   let s = ''; for(let i=0;i<lives;i++) s += '● ';
@@ -1035,12 +1126,12 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v11', s:24, gap:30},
+      {t:'書類インベーダー　v12', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
       {t:'分身で僚機・貫通弾も', s:10, c:'#5aa9e6', gap:22},
-      {t:'三つの波を越えると、何かが出る', s:12, c:'#d8b45c', gap:32},
+      {t:'全5面。2面クリアで中ボス、最後にラスボス', s:11, c:'#d8b45c', gap:32},
       {t:'タップ / スペースで開始', s:12, f:'system-ui,sans-serif', c:'#ede4d3'}
     ]);
     drawSeal(W/2, 128, 40);
@@ -1061,7 +1152,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v11', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v12', 5, 9);
   ctx.restore();
 }
 
