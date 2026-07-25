@@ -894,7 +894,7 @@ function updateMissiles(){
 }
 
 /* ---------- 描画 ---------- */
-const MSL_COL = { homing:'#c0392b', zigzag:'#d8b45c', splitter:'#2e8b8b', armored:'#7f8a99' };
+const MSL_COL = { homing:'#d1519c', zigzag:'#e67e22', splitter:'#f0c020', armored:'#96a0b0' };
 function drawMissiles(){
   for(const m of missiles){
     const ang = Math.atan2(m.vy || 1, m.vx || 0);
@@ -925,13 +925,13 @@ function drawDoc(e){
   const x = e.x - e.w/2, y = e.y - e.h/2;
   const tough = e.maxhp > 1;
   if(tough){
-    // 分厚い書類束：重なりで厚みを表現＋青系の別色
-    ctx.fillStyle = '#243a63';
+    // 分厚い書類束：重なりで厚みを表現＋紫系の別色
+    ctx.fillStyle = '#3a2452';
     ctx.fillRect(x+3, y+3, e.w, e.h);
-    ctx.fillStyle = '#33517f';
+    ctx.fillStyle = '#5a3d7a';
     ctx.fillRect(x+1.5, y+1.5, e.w, e.h);
   }
-  let tint = tough ? '#6d86b8' : ['#ede4d3', '#dfd3bd', '#cfc0a6'][e.kind];
+  let tint = tough ? '#9b6fb0' : ['#cfe0bd', '#bcd3a4', '#a9c68c'][e.kind];
   if(e.hurt > 0) tint = '#ffffff';                 // 被弾フラッシュ
   ctx.fillStyle = tint;
   ctx.fillRect(x, y, e.w, e.h);
@@ -1225,8 +1225,8 @@ function draw(){
     else enemies.filter(e=>e.alive).forEach(drawDoc);
 
     bullets.forEach(b => {
-      if(b.ink){ ctx.fillStyle = '#c0392b'; ctx.fillRect(b.x-3, b.y-7, 6, 14); }   // 朱の強化弾
-      else { ctx.fillStyle = '#d8b45c'; ctx.fillRect(b.x-2, b.y-5, 4, 10); }
+      if(b.ink){ ctx.fillStyle = '#ffb020'; ctx.fillRect(b.x-3, b.y-7, 6, 14); }   // 強化弾（橙金）
+      else { ctx.fillStyle = '#3fd0e6'; ctx.fillRect(b.x-2, b.y-5, 4, 10); }        // 通常弾（シアン）
     });
     ebullets.forEach(b=>{
       ctx.fillStyle = b.kind ? '#c0392b' : 'rgba(237,228,211,.9)';
@@ -1263,7 +1263,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v19', s:24, gap:30},
+      {t:'書類インベーダー　v20', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1289,7 +1289,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v19', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v20', 5, 9);
   ctx.restore();
 }
 
