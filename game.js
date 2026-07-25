@@ -120,9 +120,9 @@ function makeBoss(type){
     bossObj = { type: 'mid', x: W/2, y: 96, w: 96, h: 73, hp: 50, max: 50,
                 t: 0, cool: 70, hurt: 0, next: 35, mslCool: 130 };
   } else {
-    // ラスボス（所長）：3段階
-    bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 70, max: 70,
-                t: 0, cool: 60, hurt: 0, next: 55, phase: 1 };
+    // ラスボス（所長）：3段階。HPは倍設定（歯ごたえ重視）
+    bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 140, max: 140,
+                t: 0, cool: 60, hurt: 0, next: 125, phase: 1 };
   }
 }
 
@@ -131,7 +131,7 @@ function bossDown(){
   const b = bossObj;
   if(b.phase === 1){
     b.phase = 2;
-    b.hp = b.max = 80;          // 第二形態はHP増
+    b.hp = b.max = 160;         // 第二形態はHP増（倍）
     b.next = b.max - 15;
     b.hurt = 16; b.cool = 100;  // 復活直後は少し間を置く
     b.t = 0;
@@ -142,7 +142,7 @@ function bossDown(){
     // BGMはボス曲を継続（頭出しし直したい場合は bgmSet('boss', true)）
   } else if(b.phase === 2){
     b.phase = 3;
-    b.hp = b.max = 90;          // 第三形態はさらにHP増
+    b.hp = b.max = 180;         // 第三形態はさらにHP増（倍）
     b.next = b.max - 15;
     b.hurt = 18; b.cool = 90;
     b.t = 0;
@@ -468,8 +468,8 @@ function updateSwarm(){
   if(live.length === 0){
     // 進行：1面→2面→中ボス→3面→4面→5面→ラスボス
     if(wave === 2 && !midDone){
-      makeBoss('mid'); setMsg('中ボス出現　書類の魔物', 120);
-      beep(200,.5,'sawtooth',.06); bgmSet('boss', true); return;
+      makeBoss('mid'); setMsg('中ボス出現　決算の魔物', 120);
+      beep(200,.5,'sawtooth',.06); return;   // 中ボスはBGMそのまま（通常曲を継続）
     }
     if(wave >= 5){
       startBossIntro(); return;   // ラスボス登場演出（インクブリード）
@@ -789,7 +789,7 @@ function midDefeated(){
   beep(660, .4, 'triangle', .06); beep(990, .3, 'triangle', .05);
   midDone = true; bossObj = null; missiles = [];
   wave = 3; makeWave(3); player.inv = 90;
-  bgmSet('normal', true);   // 通常曲へ戻す
+  // 中ボス中もBGMは通常曲のままなので切替不要
 }
 
 // 第三形態：鼻から縦ビーム（溜め→発射）。発射中に自機がライン上にいれば被弾
@@ -951,15 +951,24 @@ function drawDoc(e){
   }
 }
 
+// 自機＝電卓
 function drawSealShip(x, y, scale, alpha){
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(x, y); ctx.scale(scale, scale);
-  ctx.fillStyle = '#b8912f'; ctx.fillRect(-4, -2, 8, 16);       // 柄
-  ctx.fillStyle = '#d8b45c'; ctx.fillRect(-14, -12, 28, 12);    // 印面
-  ctx.fillStyle = '#16233f'; ctx.font = '9px "Yu Mincho",serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('認', 0, -5.5);
+  // 砲口（弾の出口）
+  ctx.fillStyle = '#c0392b'; ctx.fillRect(-2, -15, 4, 5);
+  // 電卓本体
+  ctx.fillStyle = '#e6d3a0'; ctx.fillRect(-13, -11, 26, 21);
+  ctx.strokeStyle = '#8a6a1f'; ctx.lineWidth = 1; ctx.strokeRect(-12.5, -10.5, 25, 20);
+  // 液晶
+  ctx.fillStyle = '#16233f'; ctx.fillRect(-10.5, -8.5, 21, 6);
+  ctx.fillStyle = '#7fe6a0'; ctx.font = 'bold 6px "Courier New",monospace';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.fillText('1040', 9, -5.2);
+  // ボタン（2行×4列）
+  ctx.fillStyle = '#33517f';
+  for(let r=0;r<2;r++) for(let c=0;c<4;c++){ ctx.fillRect(-10.5 + c*5.4, -0.3 + r*4.7, 3.8, 3.3); }
   ctx.restore();
 }
 function drawPlayer(){
@@ -1254,7 +1263,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v17', s:24, gap:30},
+      {t:'書類インベーダー　v18', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1280,7 +1289,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v17', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v18', 5, 9);
   ctx.restore();
 }
 
