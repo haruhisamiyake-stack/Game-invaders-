@@ -59,7 +59,7 @@ const ITEMS = [
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
 
 function newPlayer(){
-  return { x: W/2, y: H-42, w: 30, h: 20, speed: 3.4, cool: 0, inv: 0,
+  return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
            sub: 0, subT: 0, rapidT: 0, shield: false };
 }
 
@@ -253,7 +253,9 @@ function update(){
   if(keys.ArrowRight) player.x += player.speed * mv;
   if(touchX !== null){
     const d = touchX - player.x;
-    player.x += Math.max(-5, Math.min(5, d * .35)) * mv;
+    // 指位置へ機敏に追従（近距離はそのまま、遠距離は上限で頭打ち）
+    const step = Math.abs(d) < 2 ? d : Math.max(-16, Math.min(16, d * .6));
+    player.x += step * mv;
     if(player.cool <= 0) shoot();
   }
   player.x = Math.max(18, Math.min(W-18, player.x));
