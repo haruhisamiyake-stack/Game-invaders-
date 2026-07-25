@@ -749,8 +749,9 @@ function drawGameOver(){
 }
 
 /* ---------- クリア演出（暗転→しっかり納税） ---------- */
+const WIN_HIT = 96;   // 「しっかり納税」が出るタイミング（もったいぶり）
 function startWinSeq(){
-  winMax = winT = 160;
+  winMax = winT = 195;
   score += 1000;
   ebullets = []; missiles = []; bullets = []; charge = 0; beam = null;
   flash = 12; shake = 22;
@@ -759,30 +760,48 @@ function startWinSeq(){
 function updateWinSeq(){
   winT--;
   const t = winMax - winT;
-  if(t === 26){ beep(150, .7, 'sine', .05); }                       // 暗転
-  if(t === 64){ shake = 6; beep(520, .6, 'triangle', .05); beep(784, .7, 'triangle', .045); }  // 納税の文字
+  if(t === 28){ beep(150, .8, 'sine', .05); }                       // 暗転
+  if(t === 64){ beep(180, .6, 'sine', .045); }                      // 低い唸り（タメ）
+  if(t === 82){ beep(240, .6, 'sine', .05); }                       // 緊張が高まる
+  if(t === WIN_HIT){                                                // ドンッ！文字出現
+    shake = 18; flash = 7;
+    beep(70, .9, 'sine', .09); beep(150, .8, 'triangle', .06);
+    beep(300, .7, 'sine', .05); beep(1000, .4, 'square', .03);
+  }
   if(winT <= 0){ state = 'win'; }
 }
 function drawWinSeq(){
   const t = winMax - winT;
   ctx.save();
-  // だんだん真っ暗に
-  const dark = Math.min(1, Math.max(0, (t-16)/44));
+  // だんだん真っ暗に（タメを長めに）
+  const dark = Math.min(1, Math.max(0, (t-16)/46));
   ctx.globalAlpha = dark; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = 1;
-  // 闇の中から「しっかり納税」
-  if(t >= 64){
-    const a = Math.min(1, (t-64)/26);
-    const g = ctx.createRadialGradient(W/2, H*0.42, 4, W/2, H*0.42, 130);
-    g.addColorStop(0, 'rgba(216,180,92,' + (0.20*a) + ')'); g.addColorStop(1, 'rgba(216,180,92,0)');
+  // 闇の中から「しっかり納税」がドンと出る
+  if(t >= WIN_HIT){
+    const k = t - WIN_HIT;
+    const pop = Math.min(1, k/12);              // 出現の勢い
+    const a = Math.min(1, k/16);
+    const sc = 1.4 - 0.4*pop;                   // 大きく→原寸（インパクト）
+    // 金の光背
+    const g = ctx.createRadialGradient(W/2, H*0.42, 4, W/2, H*0.42, 160);
+    g.addColorStop(0, 'rgba(216,180,92,' + (0.30*a) + ')'); g.addColorStop(1, 'rgba(216,180,92,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = a;
-    ctx.fillStyle = '#ecdcac'; ctx.font = 'bold 30px "Yu Mincho",serif';
+    // 本文（大きく）
+    ctx.save();
+    ctx.translate(W/2, H*0.42); ctx.scale(sc, sc); ctx.globalAlpha = a;
+    ctx.fillStyle = '#f2e2b2'; ctx.font = 'bold 40px "Yu Mincho",serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('しっかり納税', W/2, H*0.42);
-    ctx.font = '11px "Yu Mincho",serif'; ctx.fillStyle = 'rgba(216,180,92,' + a + ')';
-    ctx.fillText('― 税理士法人アストラスト ―', W/2, H*0.42 + 30);
-    ctx.globalAlpha = 1;
+    ctx.fillText('しっかり納税', 0, 0);
+    ctx.restore();
+    // 署名（少し遅れて）
+    if(k >= 16){
+      ctx.globalAlpha = Math.min(1, (k-16)/16);
+      ctx.fillStyle = '#d8b45c'; ctx.font = '12px "Yu Mincho",serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('― 税理士法人アストラスト ―', W/2, H*0.42 + 38);
+      ctx.globalAlpha = 1;
+    }
   }
   ctx.restore();
 }
@@ -1305,7 +1324,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v21', s:24, gap:30},
+      {t:'書類インベーダー　v22', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1331,7 +1350,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v21', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v22', 5, 9);
   ctx.restore();
 }
 
