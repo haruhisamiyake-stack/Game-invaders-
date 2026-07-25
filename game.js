@@ -60,6 +60,7 @@ const NOSE_REL_Y = 0.695;   // スプライト上の鼻の縦位置（0=上,1=�
 let state = 'title';       // title | play | clear | over | win
 let wave = 1, score = 0, lives = 3;
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
+let missiles = [];   // ボスの誘導ミサイル
 let dir = 1, stepTimer = 0, shake = 0;
 let ki = 0, charge = 0, beam = null, kbCharge = false, frame = 0, flash = 0;
 let items = [];
@@ -128,7 +129,7 @@ function bossDown(){
 function reset(){
   wave = 1; score = 0; lives = 3;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
-  player = newPlayer(); bullets = []; ebullets = []; bossObj = null;
+  player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一波　申請書類の群れ', 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
@@ -325,6 +326,7 @@ function updateBeam(){
     }
   }
   ebullets = ebullets.filter(bl => Math.abs(bl.x - b.x) > half);
+  missiles = missiles.filter(m => Math.abs(m.x - b.x) > half);   // 必殺はミサイルも消す
   if(b.life <= 0) beam = null;
 }
 
@@ -376,6 +378,7 @@ function update(){
   ebullets = ebullets.filter(b => b.y < H+10 && b.x > -10 && b.x < W+10);
 
   if(bossObj) updateBoss(); else updateSwarm();
+  if(missiles.length) updateMissiles();
 
   // 被弾
   for(const b of ebullets){
@@ -480,6 +483,23 @@ function updateBoss(){
   // 第三形態：鼻からビーム（溜め→発射）
   if(p3) updateNoseBeam(b, noseX, noseY);
 
+  // 復活形態（第二・第三）は誘導ミサイルを発射
+  if(b.phase >= 2){
+    b.mslCool = (b.mslCool || 0) - 1;
+    if(b.mslCool <= 0){
+      b.mslCool = p3 ? 110 : 165;
+      const count = p3 ? 2 : 1;
+      const sy = p3 ? noseY : b.y + b.h/2 - 6;
+      for(let i=0;i<count;i++){
+        const ang = Math.PI/2 + (i - (count-1)/2) * .5;   // 初速は下向き
+        missiles.push({ x: p3 ? noseX : b.x, y: sy,
+                        vx: Math.cos(ang)*1.4, vy: Math.sin(ang)*1.4,
+                        spd: p3 ? 2.5 : 2.1, turn: p3 ? .06 : .05, life: 300 });
+      }
+      beep(520, .12, 'square', .04);
+    }
+  }
+
   for(const bl of bullets){
     if(Math.abs(bl.x - b.x) < b.w/2 - 6 && Math.abs(bl.y - b.y) < b.h/2 - 6){
       bl.dead = true; b.hp--; b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
@@ -516,7 +536,61 @@ function updateNoseBeam(b, noseX, noseY){
   }
 }
 
+// 誘導ミサイル：自機へ緩やかに旋回して追尾。自弾で撃墜可・必殺で消せる
+function updateMissiles(){
+  for(const m of missiles){
+    const desired = Math.atan2(player.y - m.y, player.x - m.x);
+    let cur = Math.atan2(m.vy, m.vx);
+    let diff = desired - cur;
+    while(diff > Math.PI) diff -= Math.PI*2;
+    while(diff < -Math.PI) diff += Math.PI*2;
+    cur += Math.max(-m.turn, Math.min(m.turn, diff));   // 旋回速度に上限＝避けられる
+    m.vx = Math.cos(cur) * m.spd;
+    m.vy = Math.sin(cur) * m.spd;
+    m.x += m.vx; m.y += m.vy;
+    m.life--;
+    // 自機に被弾
+    if(player.inv <= 0 && Math.abs(m.x - player.x) < 14 && Math.abs(m.y - player.y) < 13){
+      m.dead = true;
+      if(player.shield){
+        player.shield = false; player.inv = 60; shake = 8;
+        setMsg('受理印が受け止めた', 26); beep(300, .18, 'triangle', .05);
+      } else {
+        lives--; player.inv = 90; shake = 15; beep(120, .3, 'sawtooth', .07);
+        if(lives <= 0){ state = 'over'; setMsg('', 0); }
+      }
+    }
+    // 自弾で撃墜
+    if(!m.dead){
+      for(const bl of bullets){
+        if(!bl.dead && Math.abs(bl.x - m.x) < 9 && Math.abs(bl.y - m.y) < 10){
+          bl.dead = true; m.dead = true; score += 8; ki = Math.min(100, ki + 1);
+          beep(560, .05, 'square', .03); break;
+        }
+      }
+    }
+  }
+  bullets = bullets.filter(bl => !bl.dead);
+  missiles = missiles.filter(m => !m.dead && m.life > 0 &&
+                                  m.x > -24 && m.x < W+24 && m.y > -24 && m.y < H+24);
+}
+
 /* ---------- 描画 ---------- */
+function drawMissiles(){
+  for(const m of missiles){
+    const ang = Math.atan2(m.vy, m.vx);
+    ctx.save();
+    ctx.translate(m.x, m.y); ctx.rotate(ang);
+    // 噴射炎
+    ctx.fillStyle = 'rgba(216,180,92,' + (.5 + .4*Math.abs(Math.sin(frame/3))) + ')';
+    ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(-12,-2.5); ctx.lineTo(-12,2.5); ctx.closePath(); ctx.fill();
+    // 弾体
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(-6,-3,11,6);
+    // 弾頭
+    ctx.fillStyle = '#ede4d3'; ctx.beginPath(); ctx.moveTo(5,-3); ctx.lineTo(10,0); ctx.lineTo(5,3); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
 function drawDoc(e){
   const x = e.x - e.w/2, y = e.y - e.h/2;
   const tint = ['#ede4d3', '#dfd3bd', '#cfc0a6'][e.kind];
@@ -768,6 +842,7 @@ function draw(){
       ctx.fillStyle = b.kind ? '#c0392b' : 'rgba(237,228,211,.9)';
       ctx.beginPath(); ctx.arc(b.x, b.y, b.kind ? 4 : 3, 0, Math.PI*2); ctx.fill();
     });
+    drawMissiles();
     items.forEach(drawItem);
     if(beam) drawBeam();
     drawPlayer();
@@ -820,7 +895,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v3', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v4', 5, 9);
   ctx.restore();
 }
 
