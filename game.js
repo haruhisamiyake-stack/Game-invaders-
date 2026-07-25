@@ -119,10 +119,27 @@ function reset(){
 function setMsg(t, f){ msg = t; msgTimer = f; }
 
 /* ---------- 音 ---------- */
-let ac = null;
+let ac = null, audioPrimed = false;
+// 端末のオーディオ規制を解除（最初のタップ／キー操作で必ず呼ぶ）
+function unlockAudio(){
+  try{
+    if(!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    if(ac.state === 'suspended') ac.resume();   // 効果音（WebAudio）の再開
+  }catch(e){}
+  if(audioPrimed) return;                        // BGMのアンロックは一度だけ
+  audioPrimed = true;
+  for(const k in BGM){
+    try{
+      const a = bgmEl(k);
+      // ジェスチャ内で一度再生して解錠。今流したい曲以外は即停止
+      a.play().then(()=>{ if(curTrack !== k){ try{ a.pause(); a.currentTime = 0; }catch(e){} } }).catch(()=>{});
+    }catch(e){}
+  }
+}
 function beep(freq, dur, type='square', vol=.05){
   try{
     if(!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    if(ac.state === 'suspended') ac.resume();
     const o = ac.createOscillator(), g = ac.createGain();
     o.type = type; o.frequency.value = freq;
     g.gain.value = vol; o.connect(g); g.connect(ac.destination);
@@ -167,6 +184,7 @@ function toggleMute(){
 /* ---------- 入力 ---------- */
 const keys = {};
 addEventListener('keydown', e=>{
+  unlockAudio();
   keys[e.code] = true;
   if(['ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
   if(e.code === 'Space' || e.code === 'Enter') tap();
@@ -190,6 +208,7 @@ function inMute(p){
   return p.x > MUTE.x-8 && p.x < MUTE.x+MUTE.w+8 && p.y > MUTE.y-8 && p.y < MUTE.y+MUTE.h+8;
 }
 cv.addEventListener('pointerdown', e=>{
+  unlockAudio();
   const p = pos(e);
   cv.setPointerCapture(e.pointerId);
   if(inMute(p)){ toggleMute(); return; }   // ミュート切替（開始前でも押せる）
