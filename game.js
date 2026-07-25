@@ -69,9 +69,12 @@ const ITEMS = [
   { k:'rapid',  label:'速', name:'速筆',   col:'#ede4d3' },
   { k:'ink',    label:'朱', name:'朱肉',   col:'#c0392b' },
   { k:'shield', label:'受', name:'受理印', col:'#b8912f' },
-  { k:'heal',   label:'薬', name:'回復薬', col:'#3aa76d' }   // ライフ回復（緑）
+  { k:'heal',   label:'薬', name:'回復薬', col:'#3aa76d' },   // ライフ回復（緑）
+  { k:'bunshin',label:'分', name:'分身',   col:'#5aa9e6' },   // 僚機（水色）
+  { k:'pierce', label:'貫', name:'貫通弾', col:'#e67e22' },   // 貫通弾（橙）
+  { k:'homing', label:'追', name:'追尾弾', col:'#9b59b6' }    // 追尾弾（紫）
 ];
-const MAX_LIVES = 5;
+const MAX_LIVES = 5, MAX_WINGS = 2;
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
 const FIRE = { x: 8, y: H-116, w: 48, h: 48 };   // 左下：その場で撃つ迎撃ボタン
 const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
@@ -79,7 +82,8 @@ const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍
 
 function newPlayer(){
   return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
-           sub: 0, subT: 0, rapidT: 0, shield: false };
+           sub: 0, subT: 0, rapidT: 0, shield: false,
+           wings: 0, pierceT: 0, homingT: 0 };
 }
 
 function makeWave(n){
@@ -260,22 +264,45 @@ function tap(){
   if(state === 'play') shoot();
 }
 
+function wingOffsets(){
+  // 分身の左右オフセット（1機＝左、2機＝左右）
+  return player.wings === 1 ? [-26] : player.wings >= 2 ? [-26, 26] : [];
+}
 function shoot(){
   if(player.cool > 0 || charge > 0 || state !== 'play') return;
+  const pierce = player.pierceT > 0, homing = player.homingT > 0;
   const n = 1 + player.sub * 2;               // 副印で2WAY→3WAY→5WAY
   for(let i=0;i<n;i++){
     const off = (i - (n-1)/2);
-    bullets.push({ x: player.x + off*4, y: player.y - 12, w: 4, h: 10, vx: off*1.5 });
+    bullets.push({ x: player.x + off*4, y: player.y - 12, w: 4, h: 10, vx: off*1.5, pierce, homing });
+  }
+  // 分身（僚機）はまっすぐ1発ずつ援護射撃
+  for(const wx of wingOffsets()){
+    bullets.push({ x: player.x + wx, y: player.y - 8, w: 4, h: 10, vx: 0, pierce, homing });
   }
   player.cool = player.rapidT > 0 ? 7 : 14;     // 速筆で連射
   beep(880, .06, 'square', .04);
 }
 
+// 追尾弾の狙う最寄り標的（敵/ボス/ミサイル）
+function nearestTarget(b){
+  let best = null, bd = 1e9;
+  const consider = (x, y)=>{ const d = (x-b.x)*(x-b.x) + (y-b.y)*(y-b.y); if(d < bd){ bd = d; best = {x, y}; } };
+  if(bossObj) consider(bossObj.x, bossObj.y);
+  else for(const e of enemies){ if(e.alive) consider(e.x, e.y); }
+  for(const m of missiles) consider(m.x, m.y);
+  return best;
+}
+
 /* ---------- パワーアップ ---------- */
 function maybeDrop(x, y, rate){
   if(Math.random() > (rate === undefined ? .14 : rate)) return;
-  // 副印/速筆/朱肉/受理印/回復薬（回復薬はやや低確率。ライフ満タン時は出さない）
-  const w = [27, 25, 22, 16, lives < MAX_LIVES ? 10 : 0];
+  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身/貫通弾/追尾弾
+  // 回復薬は満タン時は出さない。分身は最大時は出さない。
+  const w = [17, 15, 14, 12,
+             lives < MAX_LIVES ? 9 : 0,
+             player.wings < MAX_WINGS ? 12 : 0,
+             10, 9];
   const total = w.reduce((a, b) => a + b, 0);
   let r = Math.random()*total, i = 0;
   while(r > w[i] && i < w.length-1){ r -= w[i]; i++; }
@@ -294,7 +321,12 @@ function pickUp(it){
     beep(660, .1, 'triangle', .06); beep(990, .12, 'triangle', .05); beep(1320, .12, 'sine', .04);
     return;
   }
-  setMsg(d.name + '　入手', 26);
+  else if(d.k === 'bunshin'){
+    if(player.wings < MAX_WINGS){ player.wings++; setMsg('分身　僚機＋1', 28); }
+    else { score += 150; setMsg('分身　最大（＋150）', 28); }
+  }
+  else if(d.k === 'pierce'){ player.pierceT = 660; setMsg('貫通弾', 26); }
+  else if(d.k === 'homing'){ player.homingT = 660; setMsg('追尾弾', 26); }
   beep(700, .08, 'triangle', .05); beep(1050, .1, 'triangle', .04);
 }
 
@@ -309,6 +341,8 @@ function updateItems(){
 
   if(player.subT > 0 && --player.subT === 0) player.sub = 0;
   if(player.rapidT > 0) player.rapidT--;
+  if(player.pierceT > 0) player.pierceT--;
+  if(player.homingT > 0) player.homingT--;
 }
 
 /* ---------- 必殺・朱印一閃 ---------- */
@@ -390,8 +424,14 @@ function update(){
   if(player.cool > 0) player.cool--;
   if(player.inv > 0) player.inv--;
 
-  // 自弾
-  bullets.forEach(b => { b.y -= 7; b.x += b.vx || 0; });
+  // 自弾（追尾弾は最寄り標的のX方向へ寄せる）
+  bullets.forEach(b => {
+    if(b.homing){
+      const t = nearestTarget(b);
+      if(t) b.vx = Math.max(-4.5, Math.min(4.5, (b.vx || 0) + Math.sign(t.x - b.x) * .7));
+    }
+    b.y -= 7; b.x += b.vx || 0;
+  });
   bullets = bullets.filter(b => b.y > -12 && b.x > -8 && b.x < W+8);
 
   // 敵弾（球速1.5倍）
@@ -455,7 +495,7 @@ function updateSwarm(){
   for(const b of bullets){
     for(const e of live){
       if(Math.abs(b.x - e.x) < e.w/2 + 2 && Math.abs(b.y - e.y) < e.h/2 + 4){
-        e.alive = false; b.dead = true; score += e.pt;
+        e.alive = false; if(!b.pierce) b.dead = true; score += e.pt;   // 貫通弾は消えず次列へ
         ki = Math.min(100, ki + 6); maybeDrop(e.x, e.y);
         beep(520, .07, 'square', .04); break;
       }
@@ -676,17 +716,25 @@ function drawDoc(e){
   ctx.beginPath(); ctx.arc(x+e.w-6, y+e.h-5, 2.6, 0, Math.PI*2); ctx.fill();
 }
 
-function drawPlayer(){
-  if(player.inv > 0 && Math.floor(player.inv/5) % 2) return;
-  const x = player.x, y = player.y;
-  ctx.fillStyle = '#b8912f';
-  ctx.fillRect(x-4, y-2, 8, 16);            // 柄
-  ctx.fillStyle = '#d8b45c';
-  ctx.fillRect(x-14, y-12, 28, 12);         // 印面
-  ctx.fillStyle = '#16233f';
-  ctx.font = '9px "Yu Mincho",serif';
+function drawSealShip(x, y, scale, alpha){
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y); ctx.scale(scale, scale);
+  ctx.fillStyle = '#b8912f'; ctx.fillRect(-4, -2, 8, 16);       // 柄
+  ctx.fillStyle = '#d8b45c'; ctx.fillRect(-14, -12, 28, 12);    // 印面
+  ctx.fillStyle = '#16233f'; ctx.font = '9px "Yu Mincho",serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('認', x, y-5.5);
+  ctx.fillText('認', 0, -5.5);
+  ctx.restore();
+}
+function drawPlayer(){
+  const blink = player.inv > 0 && Math.floor(player.inv/5) % 2;
+  // 分身（僚機）を左右に描画（本体点滅中も表示）
+  for(const wx of wingOffsets()){
+    drawSealShip(player.x + wx, player.y + 2, .68, .9);
+  }
+  if(blink) return;
+  drawSealShip(player.x, player.y, 1, 1);
 }
 
 function drawBoss(){
@@ -853,13 +901,16 @@ function drawChips(){
   if(player.sub > 0)     on.push({ d: ITEMS[0], t: player.subT/900,   n: 1 + player.sub*2 });
   if(player.rapidT > 0)  on.push({ d: ITEMS[1], t: player.rapidT/780 });
   if(player.shield)      on.push({ d: ITEMS[3], t: 1 });
+  if(player.wings > 0)   on.push({ d: ITEMS[5], t: 1, tag: player.wings + '機' });
+  if(player.pierceT > 0) on.push({ d: ITEMS[6], t: player.pierceT/660 });
+  if(player.homingT > 0) on.push({ d: ITEMS[7], t: player.homingT/660 });
   on.forEach((o, i)=>{
     const x = 8 + i*40, y = H-52;
     ctx.fillStyle = 'rgba(14,23,48,.6)'; ctx.fillRect(x, y, 36, 14);
     ctx.strokeStyle = o.d.col; ctx.lineWidth = 1; ctx.strokeRect(x+.5, y+.5, 35, 13);
     ctx.fillStyle = o.d.col; ctx.font = '9px "Yu Mincho",serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(o.d.label + (o.n ? o.n + '発' : (o.d.k === 'shield' ? '1枚' : '')), x+4, y+7);
+    ctx.fillText(o.d.label + (o.tag ? o.tag : (o.n ? o.n + '発' : (o.d.k === 'shield' ? '1枚' : ''))), x+4, y+7);
     ctx.fillStyle = o.d.col;
     ctx.fillRect(x, y+13, 36*o.t, 1.5);
   });
@@ -965,10 +1016,11 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v7', s:24, gap:30},
+      {t:'書類インベーダー　v8', s:24, gap:30},
       {t:'押し寄せる申請書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・朱印一閃　気力を貯めて放つ', s:12, c:'#c0392b', gap:22},
-      {t:'落ちてくる印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:22},
+      {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
+      {t:'分身で僚機・貫通弾・追尾弾も', s:10, c:'#5aa9e6', gap:22},
       {t:'三つの波を越えると、何かが出る', s:12, c:'#d8b45c', gap:32},
       {t:'タップ / スペースで開始', s:12, f:'system-ui,sans-serif', c:'#ede4d3'}
     ]);
@@ -990,7 +1042,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v7', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v8', 5, 9);
   ctx.restore();
 }
 
