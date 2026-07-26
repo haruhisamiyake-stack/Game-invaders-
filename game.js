@@ -475,7 +475,7 @@ function updateAlly(){
 function startRush(){
   reset(); mode = 'rush'; ura = true; uraStage = 10;
   bossObj = null; enemies = []; makeBoss('rank', 0); startCutin(0);
-  state = 'play'; setMsg('ボスラッシュ！', 70); bgmSet('ura', true);
+  state = 'play'; setMsg('ボスラッシュ！', 70); bgmSet('uraBoss', true);
 }
 function rushBossDefeated(){
   const idx = bossObj ? bossObj.rank : 0;
@@ -657,7 +657,8 @@ function beep(freq, dur, type='square', vol=.05){
 const BGM = {
   normal: { file: 'assets/paperavalanche.mp3', vol: .45 },
   boss:   { file: 'assets/boss-theme.mp3',     vol: .5  },
-  ura:    { file: 'assets/ura-theme.mp3',      vol: .5  }   // 裏面テーマ
+  ura:    { file: 'assets/ura-theme.mp3',      vol: .5  },  // 裏面テーマ（雑魚面）
+  uraBoss:{ file: 'assets/ura-boss.mp3',       vol: .5  }   // 裏面ボス戦
 };
 let muted = false, curTrack = null, bgmAudio = null;
 function bgmAudioEl(){
@@ -987,6 +988,7 @@ function updateSwarm(){
         const finale = uraStage === 100;
         const idx = Math.min(9, (uraStage / 10) - 1);   // 裏10=調査官…裏100=国税庁長官（10段階）
         makeBoss('rank', idx); player.inv = 60; startCutin(idx);   // 昇格カットイン
+        bgmSet('uraBoss', true);                                   // 裏面ボス戦BGM
         if(finale){ beep(160, .6, 'sawtooth', .07); beep(90, .7, 'square', .05); } else beep(200, .5, 'sawtooth', .06);
         return;
       }
@@ -1421,6 +1423,7 @@ function uraBossDefeated(){
   bossObj = null; missiles = []; ebullets = [];
   if(uraStage >= 100){ uraAllClear(); return; }   // 裏100面ボス撃破＝全制覇
   uraStage++; makeUraWave(uraStage); player.inv = 90;
+  bgmSet('ura', true);                    // 裏面テーマ（雑魚面）へ戻す
   setMsg(nm + ' 撃破！　裏' + uraStage + '面へ', 100);
 }
 
@@ -2175,7 +2178,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v42', s:24, gap:30},
+      {t:'書類インベーダー　v43', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2235,7 +2238,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v42", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v43", 5, 9);
   ctx.restore();
 }
 
