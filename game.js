@@ -142,7 +142,8 @@ const ITEMS = [
   { k:'ally',   label:'税', name:'税理士',   col:'#ffd23f' }   // 税理士が自機の前に登場（弾消し＋援護）
 ];
 const MAX_LIVES = 5, MAX_WINGS = 2;
-const STAGE_NAMES = ['', '領収書の山', '請求書の束', '帳簿の海', '年末調整', '確定申告'];
+const STAGE_NAMES = ['', '領収書の山', '請求書の束', '帳簿の海', '経費の迷宮', '交際費の宴',
+                     '棚卸しの夜', '減価償却の坂', '給与計算の渦', '年末調整', '確定申告'];
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
 const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
 const PAUSE = { x: W-58, y: 8, w: 22, h: 22 };   // 一時停止（ミュートの左隣）
@@ -955,7 +956,7 @@ function updateBeam(){
       if(bossObj.hp <= bossObj.next){ bossObj.next -= 60; maybeDrop(bossObj.x, bossObj.y + 30, 1); }
       bossObj.hurt = 4;
       if(bossObj.hp <= 0 && state === 'play'){
-        if(bossObj.type === 'mid') midDefeated();
+        if(bossObj.type === 'mid' || bossObj.front) midDefeated();
         else if(bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') uraBossDefeated();
         else bossDown();
       }
@@ -1087,16 +1088,17 @@ function updateSwarm(){
       setMsg('裏' + uraStage + '面' + (barriers.length ? '　防壁あり' : ''), 80);
       return;
     }
-    // 進行：1面→2面→中ボス→3面→4面→5面→ラスボス
-    if(wave === 2 && !midDone){
-      makeBoss('mid'); setMsg('中ボス出現　決算の魔物', 120);
+    // 進行：全10面。5面で中ボス（交際費の女将）、10面でラスボス
+    if(wave === 5 && !midDone){
+      makeBoss('kousai'); bossObj.front = true;   // 表の中ボス＝交際費の女将
+      setMsg('中ボス出現　交際費の女将', 120);
       beep(200,.5,'sawtooth',.06); return;   // 中ボスはBGMそのまま（通常曲を継続）
     }
-    if(wave >= 5){
+    if(wave >= 10){
       startBossIntro(); return;   // ラスボス登場演出（インクブリード）
     }
     wave++; makeWave(wave); player.inv = 60;
-    const kanji = ['', '一', '二', '三', '四', '五'][wave] || wave;
+    const kanji = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][wave] || wave;
     setMsg('第' + kanji + '面　' + (STAGE_NAMES[wave] || '') + (barriers.length ? '　防壁あり' : ''), 90);
     return;
   }
@@ -1279,7 +1281,7 @@ function updateMidBoss(b){
       if(b.hp <= b.next){ b.next -= 48; maybeDrop(b.x, b.y + 20, 1); }
       beep(660, .04, 'square', .03);
       if(b.hp <= 0){ addBurst(b.x, b.y, '#ffd23f', 30); addBurst(b.x, b.y, '#ff5252', 16); shake = 18; flash = 10;
-        (b.type === 'mid' ? midDefeated : uraBossDefeated)(); break; }
+        (b.type === 'mid' || b.front ? midDefeated : uraBossDefeated)(); break; }
     }
   }
   bullets = bullets.filter(bl => !bl.dead);
@@ -1509,10 +1511,10 @@ function uraBossDefeated(){
 // 中ボス撃破 → 第三面へ
 function midDefeated(){
   score += 500; shake = 18; flash = 12;
-  setMsg('中ボス撃破！　第三面へ', 120);
+  setMsg('中ボス撃破！　第六面へ', 120);
   beep(660, .4, 'triangle', .06); beep(990, .3, 'triangle', .05);
-  midDone = true; bossObj = null; missiles = [];
-  wave = 3; makeWave(3); player.inv = 90;
+  midDone = true; bossObj = null; missiles = []; ebullets = [];
+  wave = 6; makeWave(6); player.inv = 90;
   // 中ボス中もBGMは通常曲のままなので切替不要
 }
 
@@ -1854,7 +1856,7 @@ function drawKousaiBoss(b){
   ctx.strokeStyle = 'rgba(237,228,211,.7)'; ctx.lineWidth = 1;
   ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
   ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
-  ctx.textAlign = 'center'; ctx.fillText('裏中ボス　交際費の女将', W/2, by - 6);
+  ctx.textAlign = 'center'; ctx.fillText((b.front ? '中ボス　' : '裏中ボス　') + '交際費の女将', W/2, by - 6);
   drawBossSpeech(b, BOSS_LINES.kousai);
 }
 function drawChosaBoss(b){
@@ -2123,8 +2125,8 @@ function drawHUD(){
   ctx.textAlign = 'left';  ctx.fillText('SCORE ' + score, 8, H-12);
   ctx.textAlign = 'right';
   ctx.fillText(bossObj
-    ? (bossObj.type === 'last' ? 'FINAL' : (bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
-    : (ura ? '裏 ' + uraStage + '/100' : 'STAGE ' + wave + '/5'), W-8, H-12);
+    ? (bossObj.type === 'last' ? 'FINAL' : bossObj.front ? 'MID BOSS' : (bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
+    : (ura ? '裏 ' + uraStage + '/100' : 'STAGE ' + wave + '/10'), W-8, H-12);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#c0392b';
   let s = ''; for(let i=0;i<lives;i++) s += '● ';
@@ -2375,11 +2377,11 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v57', s:24, gap:30},
+      {t:'書類インベーダー　v58', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
-      {t:'全5面。2面で中ボス→ラスボス所長', s:11, c:'#d8b45c', gap:18},
+      {t:'全10面。5面で中ボス・女将→ラスボス所長', s:11, c:'#d8b45c', gap:18},
       {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:30},
       {t:'タップ / スペースで開始', s:12, f:'system-ui,sans-serif', c:'#ede4d3'}
     ]);
@@ -2435,7 +2437,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v57", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v58", 5, 9);
   ctx.restore();
 }
 
