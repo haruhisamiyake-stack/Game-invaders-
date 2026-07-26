@@ -480,17 +480,27 @@ function splitEnemy(e){
 function summonAlly(){
   ally = 480;
   ebullets = []; missiles = [];   // 会議で一掃
-  shake = 8; flash = 6; setMsg('税理士 参上！　弾消し＋援護', 40);
-  beep(660, .12, 'triangle', .06); beep(990, .12, 'triangle', .05); beep(1320, .14, 'sine', .05);
+  shake = 12; flash = 10; setMsg('税理士 参上！　一括申告砲！', 44);
+  beep(660, .12, 'triangle', .06); beep(990, .12, 'triangle', .05); beep(1320, .16, 'sine', .06);
+  // 登場と同時に金の弾を一斉射撃
+  for(let i=0;i<13;i++) bullets.push({ x: player.x, y: player.y - 24, w: 5, h: 13, vx: (i-6)*0.7, dmg: 2, gold: true });
 }
 function updateAlly(){
   if(ally <= 0) return;
   ally--;
-  if(frame % 7 === 0){   // 援護射撃（自機の左右から直進）
-    bullets.push({ x: player.x - 24, y: player.y - 6, w: 4, h: 10, vx: 0, dmg: 1 });
-    bullets.push({ x: player.x + 24, y: player.y - 6, w: 4, h: 10, vx: 0, dmg: 1 });
+  const gx = player.x, gy = player.y - 30;
+  // 金の高速連射（5WAY扇状の弾幕）
+  if(frame % 4 === 0){
+    for(const vx of [-3.2, -1.6, 0, 1.6, 3.2]) bullets.push({ x: gx, y: gy, w: 5, h: 13, vx, dmg: 2, gold: true });
+    beep(1046, .03, 'square', .03);
   }
-  if(ally % 120 === 0){ ebullets = ebullets.filter(b => b.y < 40); }   // 定期弾消し
+  // 是認スタンプ砲（大きな金弾を時々ドンと）
+  if(ally % 26 === 0){
+    for(const vx of [-1, 0, 1]) bullets.push({ x: gx, y: gy, w: 10, h: 10, vx, dmg: 3, gold: true, big: true });
+    beep(760, .08, 'triangle', .05);
+  }
+  // 定期弾消し（是認！）
+  if(ally % 90 === 0){ ebullets = ebullets.filter(b => b.y < 40); missiles = missiles.filter(m => m.y < 40); shake = 6; flash = 5; }
 }
 
 /* ---------- ボスラッシュ ---------- */
@@ -2129,7 +2139,13 @@ function draw(){
     if(barriers.length) drawBarriers();
 
     bullets.forEach(b => {
-      if(b.ink){ ctx.fillStyle = '#ffb020'; ctx.fillRect(b.x-3, b.y-7, 6, 14); }   // 強化弾（橙金）
+      if(b.gold){   // 税理士の金弾（光背＋白芯できらびやか）
+        const s = b.big ? 9 : 6;
+        ctx.fillStyle = 'rgba(255,210,80,.35)'; ctx.beginPath(); ctx.arc(b.x, b.y, s+2, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(b.x, b.y, s*0.7, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff7d0'; ctx.beginPath(); ctx.arc(b.x, b.y, s*0.32, 0, Math.PI*2); ctx.fill();
+      }
+      else if(b.ink){ ctx.fillStyle = '#ffb020'; ctx.fillRect(b.x-3, b.y-7, 6, 14); }   // 強化弾（橙金）
       else { ctx.fillStyle = '#3fd0e6'; ctx.fillRect(b.x-2, b.y-5, 4, 10); }        // 通常弾（シアン）
     });
     ebullets.forEach(b=>{
@@ -2226,7 +2242,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v50', s:24, gap:30},
+      {t:'書類インベーダー　v51', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2286,7 +2302,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v50", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v51", 5, 9);
   ctx.restore();
 }
 
