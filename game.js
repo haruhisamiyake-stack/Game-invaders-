@@ -1091,6 +1091,8 @@ function updateSwarm(){
     // 進行：全10面。5面で中ボス（交際費の女将）、10面でラスボス
     if(wave === 5 && !midDone){
       makeBoss('kousai'); bossObj.front = true;   // 表の中ボス＝交際費の女将
+      bossObj.hp = bossObj.max = bossObj.hp * 5;  // 表の中ボスHP 5倍
+      bossObj.next = bossObj.max - 12;
       setMsg('中ボス出現　交際費の女将', 120);
       beep(200,.5,'sawtooth',.06); return;   // 中ボスはBGMそのまま（通常曲を継続）
     }
@@ -2377,7 +2379,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v59', s:24, gap:30},
+      {t:'書類インベーダー　v60', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2437,7 +2439,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v59", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v60", 5, 9);
   ctx.restore();
 }
 
