@@ -84,6 +84,8 @@ ZAKO.forEach((im, i)=>{ im.onload = ()=> ZAKO_READY[i] = true; im.src = 'assets/
 // お助け＝自機の前に現れる税理士
 const zeirishi = new Image(); let zeirishiReady = false;
 zeirishi.onload = ()=> zeirishiReady = true; zeirishi.src = 'assets/zeirishi.png';
+const corpLogo = new Image(); let corpLogoReady = false;
+corpLogo.onload = ()=> corpLogoReady = true; corpLogo.src = 'assets/astrust-logo.png';
 
 const RANK_IMG = Array.from({ length: 10 }, ()=> new Image());
 const RANK_READY = Array.from({ length: 10 }, ()=> false);
@@ -115,6 +117,7 @@ let cutinT = 0, cutinMax = 0, cutinIdx = 0;        // 昇格カットイン演�
 let mode = 'normal';                               // normal | rush（ボスラッシュ） | time（タイムアタック）
 let taT = 0;                                       // タイムアタック残り（フレーム）
 let ally = 0, allyN = 0;                           // 税理士お助け：残り時間／体数（最大3）
+let corpT = 0;                                     // 法人化バナー演出タイマー
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
@@ -483,21 +486,39 @@ function allyOffsets(){
   return allyN >= 3 ? [-42, 0, 42] : allyN === 2 ? [-30, 30] : [0];
 }
 function summonAlly(){
+  const was = allyN;
   allyN = Math.min(3, allyN + 1);   // 最大3体まで重ねられる
   ally = 480;
   ebullets = []; missiles = [];   // 会議で一掃
-  shake = 12; flash = 10;
-  setMsg(allyN >= 3 ? '税理士 3体！　一括申告砲・全開！' : '税理士 参上！（' + allyN + '体）　一括申告砲！', 44);
-  beep(660, .12, 'triangle', .06); beep(990, .12, 'triangle', .05); beep(1320, .16, 'sine', .06);
-  // 登場と同時に金の弾を一斉射撃（体数ぶん厚く）
-  const shots = 13 + (allyN - 1) * 6;
-  for(let i=0;i<shots;i++) bullets.push({ x: player.x, y: player.y - 24, w: 5, h: 13, vx: (i-(shots-1)/2)*0.6, dmg: 2, gold: true });
+  if(allyN >= 3 && was < 3){
+    // 3体そろって「税理士法人アストラスト」設立＝法人化！
+    corpT = 150; shake = 18; flash = 14;
+    setMsg('税理士法人アストラスト 設立！', 60);
+    beep(523,.1,'triangle',.06); beep(659,.1,'triangle',.06); beep(784,.12,'triangle',.06); beep(1046,.2,'sine',.07);
+    // 設立記念の特大一斉射撃
+    for(let i=0;i<25;i++) bullets.push({ x: player.x, y: player.y - 24, w: 6, h: 14, vx: (i-12)*0.42, dmg: 3, gold: true, big: i%3===0 });
+  } else {
+    shake = 12; flash = 10;
+    setMsg('税理士 参上！（' + allyN + '体）　一括申告砲！', 44);
+    beep(660, .12, 'triangle', .06); beep(990, .12, 'triangle', .05); beep(1320, .16, 'sine', .06);
+    const shots = 13 + (allyN - 1) * 6;
+    for(let i=0;i<shots;i++) bullets.push({ x: player.x, y: player.y - 24, w: 5, h: 13, vx: (i-(shots-1)/2)*0.6, dmg: 2, gold: true });
+  }
 }
 function updateAlly(){
+  if(corpT > 0) corpT--;
   if(ally <= 0){ allyN = 0; return; }
   ally--;
   if(ally <= 0){ allyN = 0; return; }
   const offs = allyOffsets();
+  // 法人化（3体）＝三位一体砲：ブランドカラーの太い弾を定期発射
+  if(allyN >= 3 && ally % 18 === 0){
+    const cols = ['#e8a838','#e07b2c','#7cb342'];   // 黄・橙・緑（アストラスト）
+    for(let i=0;i<3;i++){
+      bullets.push({ x: player.x + (i-1)*10, y: player.y - 40, w: 12, h: 16, vx: 0, dmg: 4, gold: true, big: true, corp: cols[i] });
+    }
+    beep(880,.05,'sawtooth',.05);
+  }
   // 金の高速連射（各税理士から5WAY扇状の弾幕）
   if(frame % 4 === 0){
     for(const ox of offs){
@@ -613,7 +634,7 @@ function reset(){
   ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
-  mode = 'normal'; taT = 0; ally = 0; allyN = 0; cutinT = 0;
+  mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; cutinT = 0;
   bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -1731,6 +1752,41 @@ function drawAlly(){
     }
     ctx.fillStyle = 'rgba(255,255,255,.9)'; drawStar(gx + 12, gy - 16, 2.4 + Math.sin(frame/4 + gi));
   });
+  // 法人化（3体）＝アストラストのロゴが依頼者を守る天蓋のように展開
+  if(allyN >= 3 && corpLogoReady){
+    const pulse = .82 + .06*Math.sin(frame/8);
+    const lw = 128 * pulse, la = corpLogo.width ? corpLogo.height/corpLogo.width : 0.49;
+    const lh = lw * la, lx = player.x, ly = player.y - 60 - Math.sin(frame/10)*2;
+    ctx.save();
+    // 後光
+    const g = ctx.createRadialGradient(lx, ly, 6, lx, ly, lw*0.7);
+    g.addColorStop(0, 'rgba(255,235,170,.30)'); g.addColorStop(1, 'rgba(255,210,63,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(lx, ly, lw*0.7, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = .92;
+    ctx.drawImage(corpLogo, lx - lw/2, ly - lh/2, lw, lh);
+    ctx.restore();
+  }
+}
+// 「税理士法人アストラスト 設立！」バナー
+function drawCorpBanner(){
+  if(corpT <= 0) return;
+  const t = corpT, appear = Math.min(1, (150 - t)/12), fade = Math.min(1, t/16);
+  const a = Math.min(appear, fade);
+  ctx.save();
+  ctx.globalAlpha = a;
+  const cy = 150;
+  // 帯
+  ctx.fillStyle = 'rgba(14,23,48,.72)'; ctx.fillRect(0, cy-34, W, 68);
+  ctx.fillStyle = '#e8a838'; ctx.fillRect(0, cy-34, W, 3); ctx.fillRect(0, cy+31, W, 3);
+  if(corpLogoReady){
+    const lw = 86, la = corpLogo.height/corpLogo.width, lh = lw*la;
+    ctx.globalAlpha = a; ctx.drawImage(corpLogo, W/2 - lw/2, cy-30-lh*0.15, lw, lh);
+  }
+  ctx.globalAlpha = a;
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 20px "Yu Mincho",serif';
+  ctx.fillText('税理士法人アストラスト 設立！', W/2, cy+16);
+  ctx.restore();
 }
 function drawPlayer(){
   if(overT > 0) return;   // ゲームオーバー演出中は自機は爆散済み
@@ -2168,7 +2224,13 @@ function draw(){
     if(barriers.length) drawBarriers();
 
     bullets.forEach(b => {
-      if(b.gold){   // 税理士の金弾（光背＋白芯できらびやか）
+      if(b.corp){   // 法人化・三位一体砲（ブランドカラーの太弾）
+        const s = 10;
+        ctx.fillStyle = b.corp + '55'; ctx.beginPath(); ctx.arc(b.x, b.y, s+3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = b.corp; ctx.beginPath(); ctx.arc(b.x, b.y, s*0.7, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, s*0.3, 0, Math.PI*2); ctx.fill();
+      }
+      else if(b.gold){   // 税理士の金弾（光背＋白芯できらびやか）
         const s = b.big ? 9 : 6;
         ctx.fillStyle = 'rgba(255,210,80,.35)'; ctx.beginPath(); ctx.arc(b.x, b.y, s+2, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(b.x, b.y, s*0.7, 0, Math.PI*2); ctx.fill();
@@ -2250,6 +2312,7 @@ function draw(){
       ctx.fillText(combo + ' コンボ', W/2, 16);
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if(corpT > 0) drawCorpBanner();   // 法人化バナー
     if(cutinT > 0) drawCutin();   // 昇格カットイン
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
     if(morphT > 0) drawMorph();   // 形態変化演出
@@ -2277,7 +2340,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v54', s:24, gap:30},
+      {t:'書類インベーダー　v55', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2337,7 +2400,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v54", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v55", 5, 9);
   ctx.restore();
 }
 
