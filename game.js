@@ -75,6 +75,7 @@ let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑�
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
+let textWallCool = 300;   // 文字の壁（税務調査ワード）のランダム出現クールダウン
 let midDone = false;   // 中ボスを倒したか
 let introT = 0, introMax = 0, introBlots = [];   // ラスボス登場演出
 let morphT = 0, morphMax = 0, morphBlots = [], morphCol = '#c0392b', morphInk = '#4e0a0c';   // 形態変化演出
@@ -229,6 +230,37 @@ function buildBarriers(count, cellHp){
     }
   }
 }
+/* 文字の壁（裏面のみ・ランダム出現）：税務調査ワードが降ってくる障害物 */
+const WALL_PHRASES = [
+  '交際費 相手方必須','誰と飲んだ？','相手方を記録せよ','一人飲みは経費か？','私用飲食を見抜け',
+  '会議費、本当ですか？','その接待、事業関連？','飲食相手が不明です','交際費判定中……','ゴルフの相手は誰だ！',
+  '領収書を捨てるな！','証拠書類を保存せよ','宛名なしを発見！','但し書きが空白だ！','レシートでも保存！',
+  '証憑不足で攻撃不能','その支払い、証拠は？','領収書が見つからない','記録なき経費は危険','電子データも保存せよ',
+  '売上を漏らすな！','現金売上を記録せよ','通帳と売上が合わない','入金の正体は何だ？','売上除外を発見！',
+  '売上計上はいつだ？','個人口座を確認せよ','現金商売に要注意','その入金、売上では？','期ズレを修正せよ！',
+  'それ、本当に経費？','私用経費を排除せよ','家事費混入を発見！','家族旅行は経費不可','私物購入に要注意',
+  '事業との関係を示せ','高額経費が接近中！','雑費に逃げるな！','使途不明金を発見！','説明できない経費あり',
+  'それは外注？給与？','外注先の実態を確認','架空外注を撃破せよ','現金外注、証拠は？','請求書が足りない！',
+  '源泉徴収を忘れるな','勤務実態を確認せよ','外注費判定中……','人工代の記録はある？','支払先を特定せよ',
+  'インボイス番号を確認','仕入税額控除を守れ','課税区分が違う！','10％？8％？','非課税売上が接近中',
+  '消費税を取り戻せ！','登録番号を照合せよ','税区分エラー発生！','簡易課税を選択済み？','2割特例、終了迫る！',
+  '申告期限が迫っている','納期限を守れ！','棚卸を忘れるな','未払金を確認せよ','前払費用を判定せよ',
+  '減価償却を開始せよ','決算整理を完了せよ','期限後申告が接近中','延滞税が増殖中！','加算税ボス出現！',
+  'この経費、説明できますか？','誰と、どこで、何のために？','元帳を見せてください','通帳も確認します','反面調査を開始します',
+  '前年と比べて増えてます','この入金は何ですか？','原始資料はありますか？','個人口座も見せて','その処理、根拠は？'
+];
+function spawnTextWall(){
+  const ph = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
+  const n = ph.length;
+  const fs = Math.max(13, Math.min(18, Math.floor((W - 24) / n)));
+  const sp = fs + 1, x0 = (W - n*sp)/2 + sp/2;
+  const y = 262, vy = 0.5 + Math.min(0.6, uraStage*0.008);   // 隊列の下に出現し、面が進むと速く降る
+  for(let i=0;i<n;i++){
+    barriers.push({ x: x0 + i*sp, y: y, s: fs, hp: 1, max: 1, alive: true, ch: ph[i], vy: vy });
+  }
+  beep(300, .1, 'square', .04);
+}
+
 // 弾が防壁に当たったら1マス削る（当たれば true）
 function hitBarrier(x, y, r){
   for(const c of barriers){
@@ -243,11 +275,23 @@ function hitBarrier(x, y, r){
 function drawBarriers(){
   for(const c of barriers){
     if(!c.alive) continue;
+    if(c.ch){   // 文字の壁（税務調査ワード）
+      ctx.fillStyle = 'rgba(78,10,12,.72)';
+      ctx.fillRect(c.x - c.s/2 - 1, c.y - c.s/2 - 1, c.s + 2, c.s + 2);
+      ctx.strokeStyle = 'rgba(192,57,43,.9)'; ctx.lineWidth = 1;
+      ctx.strokeRect(c.x - c.s/2 - .5, c.y - c.s/2 - .5, c.s + 1, c.s + 1);
+      ctx.fillStyle = '#ffd23f';
+      ctx.font = c.s + 'px "Yu Mincho",serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(c.ch, c.x, c.y + 1);
+      continue;
+    }
     ctx.fillStyle = (c.max > 1 && c.hp < c.max) ? '#8a6a1f' : '#cbb26a';
     ctx.fillRect(c.x - c.s/2, c.y - c.s/2, c.s, c.s);
     ctx.strokeStyle = 'rgba(122,86,14,.8)'; ctx.lineWidth = .5;
     ctx.strokeRect(c.x - c.s/2 + .25, c.y - c.s/2 + .25, c.s - .5, c.s - .5);
   }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 
 function inRect(p, r){ return p.x > r.x && p.x < r.x+r.w && p.y > r.y && p.y < r.y+r.h; }
@@ -310,7 +354,7 @@ function bossDown(){
 function reset(){
   wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
   ura = false; uraStage = 0; allClear = false;
-  ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
+  ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false; textWallCool = 300;
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
@@ -617,6 +661,17 @@ function update(){
   // 敵弾（球速1.5倍）
   ebullets.forEach(b => { b.y += b.vy * EBULLET_SPEED; b.x += (b.vx || 0) * EBULLET_SPEED; });
   ebullets = ebullets.filter(b => b.y < H+10 && b.x > -10 && b.x < W+10);
+
+  // 文字の壁：降下＆下端で消滅／裏面のみランダム出現
+  if(barriers.length){
+    for(const c of barriers){ if(c.vy && c.alive) c.y += c.vy; }
+    if(barriers.some(c => c.ch && c.y > H - 58)) barriers = barriers.filter(c => !(c.ch && c.y > H - 58));
+  }
+  if(ura && !bossObj){
+    if(--textWallCool <= 0 && !barriers.some(c => c.ch && c.alive)){
+      spawnTextWall(); textWallCool = 360 + Math.floor(Math.random()*360);
+    }
+  }
 
   // 防壁との当たり（自弾・敵弾は防壁を削って消える）
   if(barriers.length){
@@ -1592,7 +1647,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v28', s:24, gap:30},
+      {t:'書類インベーダー　v29', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1637,7 +1692,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v28", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v29", 5, 9);
   ctx.restore();
 }
 
