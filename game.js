@@ -109,6 +109,7 @@ let wave = 1, score = 0, lives = 3;
 let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑魚のみ・面ごとに難化）
 let best = { score: 0, ura: 0 };                   // 自己ベスト（localStorage）
 let combo = 0, comboT = 0, pops = [], scoreMul = 1;   // コンボ／スコアポップ／控除倍率
+let bursts = [];                                    // 撃破エフェクト（弾ける粒子）
 let dex = {};                                      // 税務署ランク図鑑（解禁記録）
 let cutinT = 0, cutinMax = 0, cutinIdx = 0;        // 昇格カットイン演出
 let mode = 'normal';                               // normal | rush（ボスラッシュ） | time（タイムアタック）
@@ -597,7 +598,7 @@ function reset(){
   wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
   ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
-  combo = 0; comboT = 0; pops = []; scoreMul = 1;
+  combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
   mode = 'normal'; taT = 0; ally = 0; cutinT = 0;
   bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
@@ -608,6 +609,10 @@ function reset(){
 function setMsg(t, f){ msg = t; msgTimer = f; }
 
 function addPop(x, y, txt, col){ pops.push({ x, y, txt, col, t: 0 }); }
+function addBurst(x, y, col, n){   // 撃破時の弾ける粒子
+  for(let i=0;i<n;i++){ const a = Math.random()*6.283, sp = 1 + Math.random()*2.6;
+    bursts.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 1, r: 1.5 + Math.random()*2, life: 0, max: 16 + Math.random()*14, col }); }
+}
 // 撃破スコア加算＋コンボ（控除で倍率、3コンボごとにボーナス）
 function award(pt, x, y){
   combo++; comboT = 100;
@@ -825,7 +830,7 @@ function shoot(){
 
 /* ---------- パワーアップ ---------- */
 function maybeDrop(x, y, rate){
-  if(Math.random() > (rate === undefined ? .14 : rate)) return;
+  if(Math.random() > (rate === undefined ? .28 : rate)) return;   // 通常ドロップ率を倍に
   // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身/e-Tax/税額控除/税理士（レア）
   // 回復薬は満タン時は出さない。分身は最大時は出さない。
   const w = [15, 13, 12, 11,
@@ -957,6 +962,8 @@ function update(){
   scoreMul = player.kojoT > 0 ? 2 : 1;
   for(const p of pops){ p.t++; p.y -= 0.6; }
   pops = pops.filter(p => p.t < 46);
+  for(const p of bursts){ p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life++; }
+  bursts = bursts.filter(p => p.life < p.max);
   // タイムアタック：残り時間
   if(mode === 'time'){ taT--; if(taT <= 0){ taT = 0; gameOver(); } }
 
@@ -1085,6 +1092,8 @@ function updateSwarm(){
           maybeDrop(e.x, e.y, e.sprite === 3 ? 0.42 : undefined);   // 帳簿＝アイテムを落としやすい
           if(ura) unlockDex('z' + e.sprite);
           if(e.split) splitEnemy(e);                // 加算税＝分裂
+          addBurst(e.x, e.y, Math.random() < .5 ? '#ffd23f' : '#ede4d3', 6);   // 弾ける演出
+          if(shake < 3) shake = 3;
           beep(520, .07, 'square', .04);
         } else {                                    // 固い敵：ヒットしたが未撃破
           e.hurt = 4; score += 2; ki = Math.min(100, ki + 1);
@@ -1222,7 +1231,8 @@ function updateMidBoss(b){
       bl.dead = true; b.hp -= (bl.dmg || 1); b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
       if(b.hp <= b.next){ b.next -= 48; maybeDrop(b.x, b.y + 20, 1); }
       beep(660, .04, 'square', .03);
-      if(b.hp <= 0){ (b.type === 'mid' ? midDefeated : uraBossDefeated)(); break; }
+      if(b.hp <= 0){ addBurst(b.x, b.y, '#ffd23f', 30); addBurst(b.x, b.y, '#ff5252', 16); shake = 18; flash = 10;
+        (b.type === 'mid' ? midDefeated : uraBossDefeated)(); break; }
     }
   }
   bullets = bullets.filter(bl => !bl.dead);
@@ -2200,6 +2210,12 @@ function draw(){
       ctx.fillText('TIME ' + Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'), W/2, 14);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
+    // 撃破エフェクト（弾ける粒子）
+    bursts.forEach(p=>{
+      ctx.globalAlpha = Math.max(0, 1 - p.life/p.max);
+      ctx.fillStyle = p.col; ctx.fillRect(p.x - p.r, p.y - p.r, p.r*2, p.r*2);
+    });
+    ctx.globalAlpha = 1;
     // スコアポップ
     pops.forEach(p=>{
       ctx.globalAlpha = Math.max(0, 1 - p.t/46);
@@ -2242,7 +2258,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v51', s:24, gap:30},
+      {t:'書類インベーダー　v52', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2302,7 +2318,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v51", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v52", 5, 9);
   ctx.restore();
 }
 
