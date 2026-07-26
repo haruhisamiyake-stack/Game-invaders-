@@ -69,6 +69,12 @@ let kousaiReady = false;
 kousai.onload = ()=> kousaiReady = true;
 kousai.src = "assets/kousai.png";
 
+// 裏面の中ボス（税務調査官／認印を振りかざす所長タイプ）
+const chosa = new Image();
+let chosaReady = false;
+chosa.onload = ()=> chosaReady = true;
+chosa.src = "assets/chosa.png";
+
 let state = 'title';       // title | play | over | win | uraAsk
 let wave = 1, score = 0, lives = 3;
 let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑魚のみ・面ごとに難化）
@@ -317,6 +323,12 @@ function makeBoss(type){
     bossObj = { type: 'kousai', x: W/2, y: 118, y0: 118, w: 104, h: 156, hp: hp, max: hp,
                 t: 0, cool: Math.max(28, 60 - uraStage), hurt: 0, next: hp - 12,
                 mslCool: Math.max(80, 150 - uraStage) };
+  } else if(type === 'chosa'){
+    // 裏面の中ボス：税務調査官。女将よりややタフ
+    const hp = 70 + uraStage * 4;
+    bossObj = { type: 'chosa', x: W/2, y: 118, y0: 118, w: 124, h: 150, hp: hp, max: hp,
+                t: 0, cool: Math.max(26, 58 - uraStage), hurt: 0, next: hp - 12,
+                mslCool: Math.max(80, 145 - uraStage) };
   } else {
     // ラスボス（所長）：3段階。HPは倍設定（歯ごたえ重視）
     bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 140, max: 140,
@@ -596,7 +608,7 @@ function updateBeam(){
       bossObj.hurt = 4;
       if(bossObj.hp <= 0 && state === 'play'){
         if(bossObj.type === 'mid') midDefeated();
-        else if(bossObj.type === 'kousai') uraBossDefeated();
+        else if(bossObj.type === 'kousai' || bossObj.type === 'chosa') uraBossDefeated();
         else bossDown();
       }
     }
@@ -704,9 +716,10 @@ function updateSwarm(){
     if(ura){                                   // 裏面：全100面。クリアで次面へ
       if(uraStage >= 100){ uraAllClear(); return; }
       uraStage++;
-      if(uraStage % 10 === 0){                  // 10面ごとに裏中ボス（交際費の女将）
-        makeBoss('kousai'); player.inv = 60;
-        setMsg('裏中ボス　交際費の女将', 120);
+      if(uraStage % 10 === 0){                  // 10面ごとに裏中ボス（女将⇄調査官で交互）
+        const kousaiTurn = ((uraStage / 10) % 2 === 1);   // 裏10=女将 裏20=調査官 裏30=女将…
+        makeBoss(kousaiTurn ? 'kousai' : 'chosa'); player.inv = 60;
+        setMsg('裏中ボス　' + (kousaiTurn ? '交際費の女将' : '税務調査官'), 120);
         beep(200, .5, 'sawtooth', .06);
         return;
       }
@@ -785,7 +798,7 @@ function updateSwarm(){
 
 function updateBoss(){
   const b = bossObj;
-  if(b.type === 'mid' || b.type === 'kousai'){ updateMidBoss(b); return; }
+  if(b.type === 'mid' || b.type === 'kousai' || b.type === 'chosa'){ updateMidBoss(b); return; }
   const p3 = b.phase === 3;
   b.t += p3 ? 2 : 1;                       // 第三形態は動きも約2倍速
   b.x = W/2 + Math.sin(b.t/60) * (W/2 - 60);
@@ -884,7 +897,7 @@ function updateMidBoss(b){
       bl.dead = true; b.hp -= (bl.dmg || 1); b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
       if(b.hp <= b.next){ b.next -= 12; maybeDrop(b.x, b.y + 20, 1); }
       beep(660, .04, 'square', .03);
-      if(b.hp <= 0){ (b.type === 'kousai' ? uraBossDefeated : midDefeated)(); break; }
+      if(b.hp <= 0){ (b.type === 'mid' ? midDefeated : uraBossDefeated)(); break; }
     }
   }
   bullets = bullets.filter(bl => !bl.dead);
@@ -1098,12 +1111,13 @@ function drawMorph(){
 
 // 裏中ボス（交際費の女将）撃破 → 次の裏面へ
 function uraBossDefeated(){
+  const nm = (bossObj && bossObj.type === 'chosa') ? '税務調査官' : '交際費の女将';
   score += 800; shake = 18; flash = 12;
   beep(660, .4, 'triangle', .06); beep(990, .3, 'triangle', .05);
   bossObj = null; missiles = []; ebullets = [];
   if(uraStage >= 100){ uraAllClear(); return; }   // 裏100面ボス撃破＝全制覇
   uraStage++; makeUraWave(uraStage); player.inv = 90;
-  setMsg('交際費の女将 撃破！　裏' + uraStage + '面へ', 100);
+  setMsg(nm + ' 撃破！　裏' + uraStage + '面へ', 100);
 }
 
 // 中ボス撃破 → 第三面へ
@@ -1341,10 +1355,28 @@ function drawKousaiBoss(b){
   ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
   ctx.textAlign = 'center'; ctx.fillText('裏中ボス　交際費の女将', W/2, by - 6);
 }
+function drawChosaBoss(b){
+  const x = b.x - b.w/2, y = b.y - b.h/2;
+  if(chosaReady){
+    if(b.hurt > 0) ctx.globalAlpha = .55;
+    ctx.drawImage(chosa, x, y, b.w, b.h);
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = '#1b2a4a'; ctx.fillRect(x, y, b.w, b.h);
+  }
+  const bw = 200, bx = (W-bw)/2, by = 26;
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(bx, by, bw, 8);
+  ctx.fillStyle = '#c0392b'; ctx.fillRect(bx, by, bw * b.hp/b.max, 8);
+  ctx.strokeStyle = 'rgba(237,228,211,.7)'; ctx.lineWidth = 1;
+  ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
+  ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.fillText('裏中ボス　税務調査官', W/2, by - 6);
+}
 function drawBoss(){
   const b = bossObj;
   if(b.type === 'mid'){ drawMidBoss(b); return; }
   if(b.type === 'kousai'){ drawKousaiBoss(b); return; }
+  if(b.type === 'chosa'){ drawChosaBoss(b); return; }
   const p2 = b.phase === 2, p3 = b.phase === 3;
   const img = p3 ? boss3 : (p2 ? boss2 : boss);
   const ready = p3 ? boss3Ready : (p2 ? boss2Ready : bossReady);
@@ -1518,7 +1550,7 @@ function drawHUD(){
   ctx.textAlign = 'left';  ctx.fillText('SCORE ' + score, 8, H-12);
   ctx.textAlign = 'right';
   ctx.fillText(bossObj
-    ? (bossObj.type === 'last' ? 'FINAL' : bossObj.type === 'kousai' ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
+    ? (bossObj.type === 'last' ? 'FINAL' : (bossObj.type === 'kousai' || bossObj.type === 'chosa') ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
     : (ura ? '裏 ' + uraStage + '/100' : 'STAGE ' + wave + '/5'), W-8, H-12);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#c0392b';
@@ -1646,7 +1678,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v31', s:24, gap:30},
+      {t:'書類インベーダー　v32', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1691,7 +1723,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v31", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v32", 5, 9);
   ctx.restore();
 }
 
