@@ -118,6 +118,8 @@ let mode = 'normal';                               // normal | rush（ボスラ�
 let taT = 0;                                       // タイムアタック残り（フレーム）
 let ally = 0, allyN = 0;                           // 税理士お助け：残り時間／体数（最大3）
 let corpT = 0;                                     // 法人化バナー演出タイマー
+let bigT = 0, bigMax = 0, bigTxt = '';             // 大見得テキスト（ボスの決めゼリフ）
+function bigMsg(txt, t){ bigTxt = txt; bigT = bigMax = t; }
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let minions = [];    // 表ラスボス第三形態の応援＝小型所長×2
@@ -648,7 +650,7 @@ function reset(){
   ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
-  mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; cutinT = 0;
+  mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; bigT = 0; cutinT = 0;
   bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -980,6 +982,7 @@ function updateBeam(){
 function update(){
   frame++;
   if(msgTimer > 0) msgTimer--;
+  if(bigT > 0) bigT--;
   if(shake > 0) shake--;
   if(flash > 0) flash--;
   if(state !== 'play') return;
@@ -1242,7 +1245,7 @@ function updateBoss(){
 function spawnShochoAdds(b){
   b.addsSpawned = true;
   shake = 16; flash = 12;
-  setMsg('所長「応援を頼む！」　小型所長 二名 参上', 110);
+  bigMsg('簡単に手を出すな！', 130);   // 所長の決めゼリフをデカデカと
   beep(200, .4, 'sawtooth', .06); beep(150, .5, 'square', .05);
   for(const side of [-1, 1]){
     minions.push({
@@ -1891,6 +1894,29 @@ function drawCorpBanner(){
   ctx.fillText('税理士法人アストラスト 設立！', W/2, cy+16);
   ctx.restore();
 }
+// 大見得テキスト（ボスの決めゼリフをデカデカと）
+function drawBigMsg(){
+  if(bigT <= 0) return;
+  const t = bigMax - bigT;                       // 経過フレーム
+  const pop = Math.min(1, t/9);                   // 出現（ポップイン）
+  const fade = Math.min(1, bigT/16);              // 退場（フェード）
+  const a = Math.min(pop, fade);
+  const scale = 0.7 + 0.3*Math.min(1, t/12) + (t < 12 ? 0.06*Math.sin(t/2) : 0);
+  const cy = H*0.42, sh = (t < 10) ? (Math.random()*4-2) : 0;
+  ctx.save();
+  ctx.globalAlpha = a;
+  // 背後の暗い帯（可読性）
+  ctx.fillStyle = 'rgba(14,23,48,.66)'; ctx.fillRect(0, cy-40, W, 80);
+  ctx.fillStyle = '#c0392b'; ctx.fillRect(0, cy-40, W, 4); ctx.fillRect(0, cy+36, W, 4);
+  ctx.translate(W/2 + sh, cy);
+  ctx.scale(scale, scale);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 34px "Yu Mincho",serif';
+  ctx.lineWidth = 7; ctx.strokeStyle = '#2a0d0d'; ctx.strokeText(bigTxt, 0, 0);   // 縁取り
+  ctx.lineWidth = 3; ctx.strokeStyle = '#f6d365'; ctx.strokeText(bigTxt, 0, 0);   // 金の縁
+  ctx.fillStyle = '#ff5252'; ctx.fillText(bigTxt, 0, 0);                          // 朱の本体
+  ctx.restore();
+}
 function drawPlayer(){
   if(overT > 0) return;   // ゲームオーバー演出中は自機は爆散済み
   const blink = player.inv > 0 && Math.floor(player.inv/5) % 2;
@@ -2430,6 +2456,7 @@ function draw(){
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     if(corpT > 0) drawCorpBanner();   // 法人化バナー
+    if(bigT > 0) drawBigMsg();        // ボスの決めゼリフ（大見得）
     if(cutinT > 0) drawCutin();   // 昇格カットイン
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
     if(morphT > 0) drawMorph();   // 形態変化演出
@@ -2457,7 +2484,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v62', s:24, gap:30},
+      {t:'書類インベーダー　v63', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2517,7 +2544,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v62", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v63", 5, 9);
   ctx.restore();
 }
 
