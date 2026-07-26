@@ -75,7 +75,7 @@ let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑�
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
-let textWallCool = 300;   // 文字の壁（税務調査ワード）のランダム出現クールダウン
+let bgPhrase = '', bgPhraseT = 0;   // 税務ワードの背景表示（ボス戦以外）
 let midDone = false;   // 中ボスを倒したか
 let introT = 0, introMax = 0, introBlots = [];   // ラスボス登場演出
 let morphT = 0, morphMax = 0, morphBlots = [], morphCol = '#c0392b', morphInk = '#4e0a0c';   // 形態変化演出
@@ -247,16 +247,21 @@ const WALL_PHRASES = [
   'この経費、説明できますか？','誰と、どこで、何のために？','元帳を見せてください','通帳も確認します','反面調査を開始します',
   '前年と比べて増えてます','この入金は何ですか？','原始資料はありますか？','個人口座も見せて','その処理、根拠は？'
 ];
-function spawnTextWall(){
-  const ph = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
-  const n = ph.length;
-  const fs = Math.max(13, Math.min(18, Math.floor((W - 24) / n)));
-  const sp = fs + 1, x0 = (W - n*sp)/2 + sp/2;
-  const y = 262, vy = 0.5 + Math.min(0.6, uraStage*0.008);   // 隊列の下に出現し、面が進むと速く降る
-  for(let i=0;i<n;i++){
-    barriers.push({ x: x0 + i*sp, y: y, s: fs, hp: 1, max: 1, alive: true, ch: ph[i], vy: vy });
-  }
-  beep(300, .1, 'square', .04);
+// 税務ワードの背景表示（ボス戦以外・薄く大きく・数秒ごとに切替）
+function drawBgPhrase(){
+  if(!bgPhrase) return;
+  const k = bgPhraseT;
+  let a = 1;
+  if(k < 34) a = k/34; else if(k > 186) a = (220-k)/34;   // フェードイン／アウト
+  const n = bgPhrase.length, fs = Math.min(27, Math.floor((W-20)/n));
+  ctx.save();
+  ctx.globalAlpha = 0.17 * Math.max(0, a);
+  ctx.fillStyle = '#e8d9a8';
+  ctx.font = fs + 'px "Yu Mincho",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(bgPhrase, W/2, H*0.60);
+  ctx.restore();
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 
 // 弾が防壁に当たったら1マス削る（当たれば true）
@@ -352,7 +357,8 @@ function bossDown(){
 function reset(){
   wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
   ura = false; uraStage = 0; allClear = false;
-  ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false; textWallCool = 300;
+  ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
+  bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
@@ -660,15 +666,9 @@ function update(){
   ebullets.forEach(b => { b.y += b.vy * EBULLET_SPEED; b.x += (b.vx || 0) * EBULLET_SPEED; });
   ebullets = ebullets.filter(b => b.y < H+10 && b.x > -10 && b.x < W+10);
 
-  // 文字の壁：降下＆下端で消滅／裏面のみランダム出現
-  if(barriers.length){
-    for(const c of barriers){ if(c.vy && c.alive) c.y += c.vy; }
-    if(barriers.some(c => c.ch && c.y > H - 58)) barriers = barriers.filter(c => !(c.ch && c.y > H - 58));
-  }
-  if(ura && !bossObj){
-    if(--textWallCool <= 0 && !barriers.some(c => c.ch && c.alive)){
-      spawnTextWall(); textWallCool = 360 + Math.floor(Math.random()*360);
-    }
+  // 税務ワードの背景表示（ボス戦以外・数秒ごとに切替）
+  if(!bossObj){
+    if(++bgPhraseT >= 220){ bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)]; }
   }
 
   // 防壁との当たり（自弾・敵弾は防壁を削って消える）
@@ -1581,6 +1581,7 @@ function draw(){
   ctx.fillStyle = bgPat; ctx.fillRect(-20, -20, W+40, H+40);
 
   if(state === 'play'){
+    if(!bossObj) drawBgPhrase();   // 税務ワードの背景表示（ボス戦以外）
     if(bossObj) drawBoss();
     else enemies.filter(e=>e.alive).forEach(drawDoc);
     if(barriers.length) drawBarriers();
@@ -1645,7 +1646,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v30', s:24, gap:30},
+      {t:'書類インベーダー　v31', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1690,7 +1691,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v30", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v31", 5, 9);
   ctx.restore();
 }
 
