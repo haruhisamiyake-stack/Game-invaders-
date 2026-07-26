@@ -75,6 +75,11 @@ let chosaReady = false;
 chosa.onload = ()=> chosaReady = true;
 chosa.src = "assets/chosa.png";
 
+// 裏面のザコ（税務調査官風のピクセルキャラ4種）
+const ZAKO = [new Image(), new Image(), new Image(), new Image()];
+const ZAKO_READY = [false, false, false, false];
+ZAKO.forEach((im, i)=>{ im.onload = ()=> ZAKO_READY[i] = true; im.src = 'assets/zako' + (i+1) + '.png'; });
+
 let state = 'title';       // title | play | over | win | uraAsk
 let wave = 1, score = 0, lives = 3;
 let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑魚のみ・面ごとに難化）
@@ -152,7 +157,8 @@ function makeUraWave(n){
       const tough = (r === 0);
       const hp = baseHp + (tough ? 1 + Math.min(2, Math.floor(n/8)) : 0);
       const e = { x: x0 + c*gapX, y: y0 + r*gapY, w: 26, h: 20, alive: true,
-                  kind: (r + c) % 3, pt: 20 + n, f: 0, hp: hp, maxhp: hp, hurt: 0, float: false };
+                  kind: (r + c) % 3, sprite: (r*2 + c) % 4, pt: 20 + n, f: 0,
+                  hp: hp, maxhp: hp, hurt: 0, float: false };
       if(n >= 3 && Math.random() < floatRatio){        // 独立移動する敵
         e.float = true; e.t = Math.floor(Math.random()*100);
         e.amp = 26 + Math.random()*38;
@@ -1370,6 +1376,27 @@ function drawDoc(e){
   }
 }
 
+// 裏面ザコ＝税務調査官風ピクセルキャラ（4種）
+function drawZako(e){
+  const idx = e.sprite % 4, img = ZAKO[idx], ready = ZAKO_READY[idx];
+  if(e.maxhp > 1){   // 固い敵：朱のオーラ
+    ctx.fillStyle = 'rgba(192,57,43,.22)';
+    ctx.beginPath(); ctx.arc(e.x, e.y, 16, 0, Math.PI*2); ctx.fill();
+  }
+  if(ready){
+    const asp = img.height ? img.width / img.height : 1;
+    const h = 30, w = h * asp;
+    if(e.hurt > 0) ctx.globalAlpha = .5;
+    ctx.drawImage(img, e.x - w/2, e.y - h/2 - 1, w, h);
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = e.hurt > 0 ? '#fff' : '#3a2452';
+    ctx.fillRect(e.x - 13, e.y - 10, 26, 20);
+  }
+  if(e.maxhp > 1){   // 残り耐久ピップ
+    for(let i=0;i<e.hp;i++){ ctx.fillStyle = '#c0392b'; ctx.fillRect(e.x - 11 + i*4, e.y - 16, 2.5, 2.5); }
+  }
+}
 // 自機＝電卓
 function drawSealShip(x, y, scale, alpha){
   ctx.save();
@@ -1743,7 +1770,7 @@ function draw(){
   if(state === 'play'){
     if(!bossObj) drawBgPhrase();   // 税務ワードの背景表示（ボス戦以外）
     if(bossObj) drawBoss();
-    else enemies.filter(e=>e.alive).forEach(drawDoc);
+    else { const dr = ura ? drawZako : drawDoc; enemies.filter(e=>e.alive).forEach(dr); }
     if(barriers.length) drawBarriers();
 
     bullets.forEach(b => {
@@ -1835,7 +1862,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v35', s:24, gap:30},
+      {t:'書類インベーダー　v36', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1892,7 +1919,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v35", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v36", 5, 9);
   ctx.restore();
 }
 
