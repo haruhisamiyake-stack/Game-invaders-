@@ -498,7 +498,7 @@ function makeBoss(type, arg){
     // 裏面ボスの昇格ラダー（役職が上がるほど大きく・タフ・攻撃的）
     const idx = arg | 0, asp = RANK_ASP[idx];
     const h = 150 + idx*5, w = h * asp, y = 46 + h/2;
-    const hp = 90 + idx*40 + uraStage*4;
+    const hp = (90 + idx*40 + uraStage*4) * 5;   // 裏ボスHP 5倍（歯ごたえ）
     bossObj = { type: 'rank', rank: idx, finale: uraStage === 100 || mode === 'rush' && idx === 9, x: W/2, y: y, y0: y, w: w, h: h, hp: hp, max: hp,
                 t: 0, cool: Math.max(22, 56 - uraStage - idx*3), hurt: 0, next: hp - 12,
                 mslCool: Math.max(70, 150 - uraStage - idx*8), spCool: Math.max(56, 120 - idx*8),
@@ -2186,7 +2186,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v45', s:24, gap:30},
+      {t:'書類インベーダー　v46', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2246,7 +2246,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v45", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v46", 5, 9);
   ctx.restore();
 }
 
