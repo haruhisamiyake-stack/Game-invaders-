@@ -120,6 +120,7 @@ let ally = 0, allyN = 0;                           // 税理士お助け：残�
 let corpT = 0;                                     // 法人化バナー演出タイマー
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
+let minions = [];    // 表ラスボス第三形態の応援＝小型所長×2
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
 let bgPhrase = '', bgPhraseT = 0;   // 税務ワードの背景表示（ボス戦以外）
 let midDone = false;   // 中ボスを倒したか
@@ -649,7 +650,7 @@ function reset(){
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
   mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; cutinT = 0;
   bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
-  player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
+  player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
@@ -1052,6 +1053,7 @@ function update(){
   }
 
   if(bossObj) updateBoss(); else updateSwarm();
+  if(minions.length) updateMinions();
   if(missiles.length) updateMissiles();
 
   // 被弾
@@ -1228,10 +1230,85 @@ function updateBoss(){
       bl.dead = true; b.hp -= (bl.dmg || 1); b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
       if(b.hp <= b.next){ b.next -= 60; maybeDrop(b.x, b.y + 30, 1); }
       beep(660, .04, 'square', .03);
+      // 第三形態がHP半分を下回ったら、応援＝小型所長×2を一度だけ召喚
+      if(p3 && !b.addsSpawned && b.hp <= b.max/2 && b.hp > 0) spawnShochoAdds(b);
       if(b.hp <= 0){ bossDown(); break; }
     }
   }
   bullets = bullets.filter(bl => !bl.dead);
+}
+
+// 小型所長×2を本体の左右に召喚
+function spawnShochoAdds(b){
+  b.addsSpawned = true;
+  shake = 16; flash = 12;
+  setMsg('所長「応援を頼む！」　小型所長 二名 参上', 110);
+  beep(200, .4, 'sawtooth', .06); beep(150, .5, 'square', .05);
+  for(const side of [-1, 1]){
+    minions.push({
+      x0: W/2 + side*96, y0: 150, x: W/2 + side*96, y: 150,
+      w: 52, h: 56, hp: 130, max: 130, hurt: 0, t: Math.floor(Math.random()*60),
+      cool: 60 + Math.floor(Math.random()*30), phase: side > 0 ? 3.14 : 0
+    });
+  }
+}
+
+// 応援（小型所長）の更新：左右で漂いつつ、ゆっくり扇状弾。倒すとアイテム＋加点
+function updateMinions(){
+  if(!minions.length) return;
+  for(const m of minions){
+    m.t++;
+    if(m.hurt > 0) m.hurt--;
+    m.x = m.x0 + Math.sin(m.t/40 + m.phase) * 22;
+    m.y = m.y0 + Math.sin(m.t/55 + m.phase) * 12;
+    // ゆっくり扇状弾（本体より控えめ）
+    m.cool--;
+    if(m.cool <= 0){
+      m.cool = 96;
+      const aim = Math.atan2(player.y - m.y, player.x - m.x);
+      for(let i=0;i<3;i++){
+        const a = aim + (i-1) * .26;
+        ebullets.push({ x: m.x, y: m.y + m.h/2 - 6, vx: Math.cos(a)*2.3, vy: Math.sin(a)*2.3, kind: 1 });
+      }
+      beep(190, .09, 'sawtooth', .04);
+    }
+    // 被弾判定
+    for(const bl of bullets){
+      if(bl.dead) continue;
+      if(Math.abs(bl.x - m.x) < m.w/2 - 6 && Math.abs(bl.y - m.y) < m.h/2 - 6){
+        bl.dead = true; m.hp -= (bl.dmg || 1); m.hurt = 5; score += 5; ki = Math.min(100, ki + .6);
+        beep(620, .04, 'square', .03);
+        if(m.hp <= 0){
+          m.dead = true; score += 200; shake = 10; flash = 6;
+          addBurst(m.x, m.y, '#c0392b', 20); addBurst(m.x, m.y, '#ffd23f', 12);
+          maybeDrop(m.x, m.y, 1);   // 必ずアイテムを落とす
+          beep(880, .12, 'triangle', .05);
+          break;
+        }
+      }
+    }
+  }
+  bullets = bullets.filter(bl => !bl.dead);
+  minions = minions.filter(m => !m.dead);
+}
+
+// 応援（小型所長）の描画：第一形態の所長を0.6倍で
+function drawMinions(){
+  for(const m of minions){
+    const x = m.x - m.w/2, y = m.y - m.h/2;
+    if(bossReady){
+      if(m.hurt > 0) ctx.globalAlpha = .55;
+      ctx.drawImage(boss, x, y, m.w, m.h);
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.fillStyle = '#c0392b'; ctx.fillRect(x, y, m.w, m.h);
+    }
+    ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 1.5; ctx.strokeRect(x+1, y+1, m.w-2, m.h-2);
+    // 小型HPバー
+    const bw = m.w, bx = m.x - bw/2, by = y - 7;
+    ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(bx, by, bw, 3);
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(bx, by, bw * m.hp/m.max, 3);
+  }
 }
 
 // 中ボス：単形態。扇状の弾＋たまに誘導ミサイル。倒すと第三面へ
@@ -1407,7 +1484,7 @@ const WIN_HIT = 96;   // 「しっかり納税」が出るタイミング（も�
 function startWinSeq(){
   winMax = winT = 195;
   score += 1000; saveBest();
-  ebullets = []; missiles = []; bullets = []; charge = 0; beam = null;
+  ebullets = []; missiles = []; minions = []; bullets = []; charge = 0; beam = null;
   flash = 12; shake = 22;
   beep(880, .5, 'triangle', .06); beep(1320, .5, 'triangle', .05);
 }
@@ -2254,6 +2331,7 @@ function draw(){
     if(!bossObj) drawBgPhrase();   // 税務ワードの背景表示（ボス戦以外）
     if(bossObj) drawBoss();
     else { const dr = ura ? drawZako : drawDoc; enemies.filter(e=>e.alive).forEach(dr); }
+    if(minions.length) drawMinions();
     if(barriers.length) drawBarriers();
 
     bullets.forEach(b => {
@@ -2379,7 +2457,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v61', s:24, gap:30},
+      {t:'書類インベーダー　v62', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2439,7 +2517,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v61", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v62", 5, 9);
   ctx.restore();
 }
 
