@@ -29,14 +29,14 @@ let CW=430, CH=Math.round(CW/ASPECT);
 const board=new Image(); board.src='board.png?v=5'; let boardReady=false;
 board.onload=()=>{boardReady=true;};
 
-/* coin path traced along the board's real white lanes (x%,y% of board) */
-const WP=[[9.9,18.8],[44.7,18.8],[48.1,21.8],[64.5,21.8],[78.1,21.5],[81.9,18.3],[71.6,19.6],[65.4,25.0],[65.4,26.9],[66.7,27.9],[75.3,28.5],[80.6,32.8],[85.9,32.8],[83.1,33.0],[83.1,38.7],[88.7,43.5],[88.7,45.1],[91.2,49.4],[91.5,51.3],[85.0,57.0],[84.0,63.9],[83.1,64.7],[79.7,64.7],[78.8,65.5],[67.3,65.5],[57.7,73.9],[45.6,73.9],[43.4,76.3],[50.5,82.2],[84.7,82.2],[85.9,81.1],[89.0,81.1],[89.9,81.9],[88.1,81.1],[85.9,81.1],[52.1,81.4],[51.2,82.2],[42.8,82.2],[40.0,79.8],[23.9,79.8],[18.0,84.9],[16.1,84.1],[13.6,84.1],[5.9,77.4],[5.6,72.3],[4.7,70.7],[6.2,70.4],[15.2,62.6],[17.7,62.6],[20.8,59.9],[11.5,60.7],[6.8,64.2],[5.0,61.8],[5.0,48.9],[6.5,47.5],[6.8,50.0],[21.7,50.0],[25.4,46.7],[30.4,46.7],[38.4,39.8],[48.4,39.8],[54.0,34.9],[54.0,34.1],[52.7,33.8],[47.4,29.3],[40.0,28.2],[36.9,25.5],[20.8,25.5],[15.8,29.8],[18.3,29.0],[21.1,26.9],[36.3,25.5],[43.7,25.5],[54.0,34.1],[54.0,34.9],[50.2,35.2],[48.7,36.3],[39.4,36.3],[54.6,36.3],[59.5,40.6],[59.5,41.9],[62.3,44.3],[56.1,45.7],[49.3,51.6],[49.3,54.0],[46.5,56.4],[45.9,57.8],[45.9,73.6],[43.4,75.8],[43.4,83.0],[43.7,87.3],[46.8,90.0]];
-const LM=[{n:"東京駅",i:0,pts:0},{n:"スポーツ",i:2,pts:150},{n:"富士山",i:5,pts:300},{n:"お城",i:12,pts:250},{n:"灯台",i:19,pts:250},{n:"工場",i:32,pts:300},{n:"相撲",i:40,pts:100},{n:"港",i:46,pts:100},{n:"船",i:49,pts:150},{n:"お寺",i:54,pts:150},{n:"スカイツリー",i:68,pts:200},{n:"神社",i:77,pts:200},{n:"たこやき",i:82,pts:200},{n:"東京タワー",i:86,pts:300},{n:"ゴール",i:91,pts:1000}];
-const HOLES=[{x:9,y:38,r:4.6},{x:49,y:42,r:3.6},{x:86,y:47,r:3.3},{x:7,y:62,r:4.6},
-  {x:55,y:63,r:3.6},{x:18,y:79,r:4.2},{x:43,y:80,r:3.2},{x:30,y:73,r:3.0},{x:70,y:70,r:3.2}];
+/* course = the intended red line, traced. Coin rolls DOWN from 東京駅 to ゴール. */
+const WP=[[8.5,19.6],[45.4,21.4],[75.0,25.4],[89.2,31.9],[87.7,34.8],[70.2,36.0],[51.3,35.5],[28.5,38.6],[13.8,43.8],[5.6,49.6],[8.6,50.5],[16.2,48.8],[50.0,52.3],[86.9,60.5],[93.6,64.3],[94.3,66.5],[52.7,58.6],[37.2,57.5],[13.0,65.9],[3.5,73.5],[8.2,74.9],[59.7,75.9],[65.7,74.9],[91.2,89.1],[91.6,90.8],[87.2,91.2],[78.4,89.4],[70.3,89.5],[61.0,86.8],[49.0,86.2],[38.9,87.8],[33.6,92.5],[35.3,99.8]];
+const LM=[{n:"東京駅",i:0,pts:0},{n:"スポーツ",i:1,pts:150},{n:"お城",i:3,pts:250},{n:"神社",i:6,pts:200},{n:"お寺",i:9,pts:200},{n:"東京タワー",i:12,pts:250},{n:"灯台",i:13,pts:300},{n:"工場",i:23,pts:300},{n:"ゴール",i:32,pts:1000}];
+const HOLES=[{x:9,y:38,r:4.6},{x:49,y:42,r:3.6},{x:7,y:62,r:4.6},{x:55,y:63,r:3.6},
+  {x:18,y:79,r:4.2},{x:43,y:80,r:3.2},{x:30,y:73,r:3.0}];
 
 /* geometry */
-let P=[], cumS=[], lmS=[], DIST_MAX=1, holePx=[], captureR=1, totalL=1;
+let P=[],cumS=[],lmS=[],totalL=1,holePx=[],DIST_MAX=1,failZones=[];
 function ptAt(s){
   s=Math.max(0,Math.min(totalL,s));
   for(let i=0;i<P.length-1;i++){
@@ -47,18 +47,25 @@ function ptAt(s){
 }
 function buildGeom(){
   P=WP.map(p=>({x:p[0]/100*CW,y:p[1]/100*CH}));
-  cumS=[0];
-  for(let i=1;i<P.length;i++) cumS[i]=cumS[i-1]+Math.hypot(P[i].x-P[i-1].x,P[i].y-P[i-1].y);
+  cumS=[0]; for(let i=1;i<P.length;i++) cumS[i]=cumS[i-1]+Math.hypot(P[i].x-P[i-1].x,P[i].y-P[i-1].y);
   totalL=cumS[cumS.length-1];
   lmS=LM.map(l=>cumS[l.i]);
-  DIST_MAX=0;
-  for(let k=1;k<lmS.length;k++) DIST_MAX=Math.max(DIST_MAX,lmS[k]-lmS[k-1]);
-  captureR=Math.min(34,CW*0.07);
-  DIST_MAX+=captureR*0.6;
   holePx=HOLES.map(h=>({x:h.x/100*CW,y:h.y/100*CH,r:h.r/100*CW}));
+  DIST_MAX=totalL*0.34;
+  // hazard zones: arc ranges where the path passes near a hole (don't stop here)
+  failZones=[]; const step=totalL/500; let open=null;
+  for(let s=0;s<=totalL;s+=step){
+    const rp=ptAt(s);
+    let haz=false;
+    for(const h of holePx){ if(Math.hypot(rp.x-h.x,rp.y-h.y)<h.r+CW*0.028){haz=true;break;} }
+    if(haz&&open===null)open=s;
+    else if(!haz&&open!==null){failZones.push([open,s]);open=null;}
+  }
+  if(open!==null)failZones.push([open,totalL]);
 }
+function inHazard(s){for(const z of failZones)if(s>=z[0]&&s<=z[1])return true;return false;}
 function resize(){
-  const availW=Math.min(window.innerWidth-12,460), availH=window.innerHeight-12;
+  const availW=Math.min(window.innerWidth-12,460),availH=window.innerHeight-12;
   CW=Math.min(availW,availH*ASPECT); CH=CW/ASPECT;
   const dpr=Math.min(2,window.devicePixelRatio||1);
   cv.width=CW*dpr; cv.height=CH*dpr; cv.style.width=CW+'px'; cv.style.height=CH+'px';
@@ -77,7 +84,7 @@ function sfxCharge(p){beep(300+p*6,0.05,'square',0.05);}
 function sfxRoll(){beep(520,0.08,'triangle',0.12);}
 function sfxScore(){beep(880,0.09,'square',0.16);setTimeout(()=>beep(1320,0.12,'square',0.16),80);}
 function sfxFail(){beep(200,0.25,'sawtooth',0.18);setTimeout(()=>beep(140,0.3,'sawtooth',0.16),120);}
-function sfxWin(){[523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,0.18,'square',0.18),i*130));}
+function sfxWin(){[523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,0.2,'square',0.2),i*140));}
 
 /* state */
 let G;
@@ -86,8 +93,8 @@ reset();
 
 function startCharge(){if(G.state==='ready'){G.state='charging';G.power=0;G.pdir=1;}}
 function release(){if(G.state==='charging'){G.state='rolling';
-  const D=G.power/100*DIST_MAX*(0.97+Math.random()*0.06);
-  G.vel=Math.sqrt(2*0.22*Math.max(4,D)); sfxRoll();}}
+  const D=G.power/100*DIST_MAX*(0.95+Math.random()*0.09);
+  G.vel=Math.sqrt(2*0.20*Math.max(4,D)); sfxRoll();}}
 cv.addEventListener('pointerdown',e=>{e.preventDefault();
   if(G.state==='won'||G.state==='over'){reset();return;} startCharge();});
 cv.addEventListener('pointerup',e=>{e.preventDefault();release();});
@@ -100,47 +107,53 @@ function update(){
   G.t++; if(G.flash>0)G.flash--; if(G.msgT>0)G.msgT--;
   G.pop=G.pop.filter(p=>{p.t++;p.y-=0.5;return p.t<70;});
   if(G.state==='charging'){
-    G.power+=2.4*G.pdir;
+    G.power+=2.3*G.pdir;
     if(G.power>=100){G.power=100;G.pdir=-1;}
     if(G.power<=0){G.power=0;G.pdir=1;}
     if(G.t%4===0)sfxCharge(G.power);
   }else if(G.state==='rolling'){
-    G.coinS+=G.vel; G.vel-=0.22;
+    const prev=G.coinS;
+    G.coinS+=G.vel; G.vel-=0.20;
     if(G.coinS>=totalL){G.coinS=totalL;G.vel=0;}
+    // score landmarks passed during this motion
+    for(let k=G.reached+1;k<LM.length;k++){
+      if(lmS[k]<=G.coinS && lmS[k]>prev){
+        G.reached=k; if(!LM[k].n.match(/ゴール/)){G.score+=LM[k].pts;popText(lmS[k],'+'+LM[k].pts,'#1b7a2e');sfxScore();}
+      }
+    }
     if(G.vel<=0){G.vel=0;resolveRest();}
   }
 }
 function resolveRest(){
   const s=G.coinS;
-  if(s>=lmS[LM.length-1]-captureR){collect(LM.length-1);winGame();return;}
-  const nextIdx=G.reached+1, nextS=lmS[nextIdx];
-  const rp=ptAt(s);
-  for(const h of holePx){ if(Math.hypot(rp.x-h.x,rp.y-h.y)<h.r){failCoin('穴に落ちた！');return;} }
-  if(s>=nextS-captureR && s<=nextS+captureR){collect(nextIdx);G.state='ready';return;}
-  if(s>nextS+captureR){failCoin('行き過ぎ！');return;}
-  G.state='ready'; G.msg='もう一歩！'; G.msgT=60;
-}
-function collect(idx){
-  while(G.reached<idx){
-    G.reached++; const c=LM[G.reached]; G.score+=c.pts;
-    if(G.reached<LM.length-1) popText(lmS[G.reached],'+'+c.pts,'#1b7a2e');
-    G.coinS=lmS[G.reached];
-  }
-  sfxScore(); G.flash=8;
-  if(idx<LM.length-1){G.msg=LM[idx].n+' 到着！';G.msgT=70;}
+  if(s>=lmS[LM.length-1]-2){winGame();return;}
+  if(inHazard(s)){failCoin('穴に落ちた！');return;}
+  G.state='ready';
+  const [lo,hi]=targetBand();
+  G.msg = (hi<lo)?'弱めに！手前で止めて':'';
+  G.msgT = G.msg?60:0;
 }
 function failCoin(reason){
   G.coins--; sfxFail(); popText(G.coinS,'MISS','#c0392b');
-  G.msg=reason; G.msgT=80; G.flash=12;
+  G.msg=reason; G.msgT=90; G.flash=14;
   if(G.coins<=0){G.state='over';return;}
-  G.coinS=lmS[G.reached]; G.state='ready';
+  G.coinS=lmS[G.reached]; G.state='ready';   // respawn at last landmark reached
 }
-function winGame(){G.state='won';G.score+=G.coins*200;sfxWin();}
+function winGame(){G.state='won';G.reached=LM.length-1;G.score+=1000+G.coins*200;sfxWin();G.flash=20;}
+
+/* safe power window to clear the next hazard ahead */
 function targetBand(){
-  const nextS=lmS[Math.min(G.reached+1,LM.length-1)];
-  const need=nextS-G.coinS;
-  return [Math.max(0,Math.min(100,(need-captureR)/DIST_MAX*100)),
-          Math.max(0,Math.min(100,(need+captureR*0.6)/DIST_MAX*100))];
+  const s=G.coinS, reach=s+DIST_MAX;
+  let z=null;
+  for(const zz of failZones){ if(zz[1]>s+2 && zz[0]<reach){ z=zz; break; } }
+  if(!z) return [10,100];                 // clear ahead
+  const clearDist=z[1]-s+totalL*0.006;
+  if(clearDist>DIST_MAX){                 // can't clear -> stop short of it
+    return [0, Math.max(0,(z[0]-s-totalL*0.006)/DIST_MAX*100)];
+  }
+  let nextZ=null; for(const zz of failZones){ if(zz[0]>z[1]){nextZ=zz;break;} }
+  const capDist=(nextZ?nextZ[0]:reach)-s-totalL*0.006;
+  return [Math.min(100,clearDist/DIST_MAX*100), Math.min(100,Math.max(clearDist,capDist)/DIST_MAX*100)];
 }
 
 /* draw */
@@ -149,22 +162,24 @@ function draw(){
   if(boardReady) ctx.drawImage(board,0,0,CW,CH);
   else {ctx.fillStyle='#e9c23b';ctx.fillRect(0,0,CW,CH);}
 
-  // landmark indicators (collected = green tick, next = pulsing red)
-  const nextIdx=Math.min(G.reached+1,LM.length-1);
-  LM.forEach((l,i)=>{
-    if(i===0)return;
-    const p=ptAt(lmS[i]);
-    if(i<=G.reached){ ring(p.x,p.y,captureR*0.55,'rgba(27,122,46,.9)',3); }
-    else if(i===nextIdx){
-      const pulse=captureR*(0.9+0.12*Math.sin(G.t*0.18));
-      ctx.fillStyle='rgba(255,80,80,.16)';ctx.beginPath();ctx.arc(p.x,p.y,pulse,0,7);ctx.fill();
-      ring(p.x,p.y,pulse,'rgba(255,60,60,.95)',4);
-    }
-  });
+  // next hazard warning marker
+  if(G.state==='ready'||G.state==='charging'){
+    const s=G.coinS,reach=s+DIST_MAX;
+    for(const z of failZones){ if(z[1]>s+2 && z[0]<reach){
+      const m=ptAt((z[0]+z[1])/2), pr=CW*0.045*(1+0.12*Math.sin(G.t*0.2));
+      ctx.strokeStyle='rgba(220,40,40,.9)';ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(m.x,m.y,pr,0,7);ctx.stroke();
+      ctx.fillStyle='rgba(220,40,40,.95)';ctx.font='bold '+Math.round(CW*0.05)+'px sans-serif';
+      ctx.textAlign='center';ctx.fillText('!',m.x,m.y+CW*0.018);
+      break; } }
+  }
+  // goal marker
+  const gp=ptAt(totalL);
+  ctx.strokeStyle='rgba(30,150,60,.9)';ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(gp.x,gp.y,CW*0.05,0,7);ctx.stroke();
 
   const cp=ptAt(G.coinS);
-  // direction of travel for a little motion trail
-  drawCoin(cp.x,cp.y,CW*0.042);
+  drawCoin(cp.x,cp.y,CW*0.043);
 
   G.pop.forEach(p=>{ctx.globalAlpha=Math.max(0,1-p.t/70);ctx.fillStyle=p.col;
     ctx.font='bold '+Math.round(CW*0.05)+'px sans-serif';ctx.textAlign='center';
@@ -173,10 +188,9 @@ function draw(){
 
   drawHUD(); drawMeter();
   if(G.msgT>0)drawBanner(G.msg);
-  if(G.state==='won')drawEnd('🎉 ゴール！ 🎉','スコア '+G.score,'#2e7d32');
-  if(G.state==='over')drawEnd('GAME OVER','スコア '+G.score,'#c0392b');
+  if(G.state==='won')drawEnd('🎉 ゴール！ 🎉','スコア '+G.score,true);
+  if(G.state==='over')drawEnd('GAME OVER','スコア '+G.score,false);
 }
-function ring(x,y,r,c,w){ctx.strokeStyle=c;ctx.lineWidth=w;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();}
 function drawCoin(x,y,r){
   ctx.save();ctx.translate(x,y);
   ctx.shadowColor='rgba(0,0,0,.4)';ctx.shadowBlur=7;ctx.shadowOffsetY=3;
@@ -203,26 +217,26 @@ function drawMeter(){
   ctx.fillStyle='rgba(0,0,0,.6)';roundRect(mx-6,my-6,mw+12,mh+12,8);ctx.fill();
   ctx.fillStyle='#222';roundRect(mx,my,mw,mh,6);ctx.fill();
   const [lo,hi]=targetBand();
-  ctx.fillStyle='rgba(60,220,90,.85)';ctx.fillRect(mx+mw*lo/100,my,mw*(hi-lo)/100,mh);
+  if(hi>lo){ctx.fillStyle='rgba(60,220,90,.85)';ctx.fillRect(mx+mw*lo/100,my,mw*(hi-lo)/100,mh);}
   const pf=G.state==='charging'?G.power:0;
-  ctx.fillStyle=G.power>hi?'#ff5a4a':(G.power>=lo?'#3cdc5a':'#ffd23f');
+  ctx.fillStyle=(G.power>=lo&&G.power<=hi)?'#3cdc5a':'#ffd23f';
   ctx.fillRect(mx,my,mw*pf/100,mh);
   ctx.strokeStyle='#fff';ctx.lineWidth=2;roundRect(mx,my,mw,mh,6);ctx.stroke();
   ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold '+Math.round(CW*0.034)+'px sans-serif';
-  const hint=G.state==='ready'?'押し続けて離す＝発射':G.state==='charging'?'パワー '+Math.round(G.power):'';
+  const hint=G.state==='ready'?'押し続けて離す＝発射（緑で止める）':G.state==='charging'?'パワー '+Math.round(G.power):'コロコロ…';
   ctx.fillText(hint,CW/2,my-10);
 }
 function drawBanner(txt){
   ctx.save();ctx.globalAlpha=Math.min(1,G.msgT/20);
-  ctx.fillStyle='rgba(0,0,0,.72)';const w=CW*0.74,h=CH*0.06,x=(CW-w)/2,y=CH*0.43;
+  ctx.fillStyle='rgba(0,0,0,.72)';const w=CW*0.74,h=CH*0.06,x=(CW-w)/2,y=CH*0.42;
   roundRect(x,y,w,h,10);ctx.fill();
   ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.font='bold '+Math.round(CW*0.05)+'px sans-serif';ctx.fillText(txt,CW/2,y+h/2);
   ctx.restore();ctx.textBaseline='alphabetic';
 }
-function drawEnd(title,sub,col){
+function drawEnd(title,sub,win){
   ctx.fillStyle='rgba(0,0,0,.62)';ctx.fillRect(0,0,CW,CH);
-  ctx.textAlign='center';ctx.fillStyle=col==='#2e7d32'?'#8ef0a0':'#ff8a8a';
+  ctx.textAlign='center';ctx.fillStyle=win?'#8ef0a0':'#ff8a8a';
   ctx.font='bold '+Math.round(CW*0.1)+'px sans-serif';ctx.fillText(title,CW/2,CH*0.44);
   ctx.fillStyle='#fff';ctx.font='bold '+Math.round(CW*0.06)+'px sans-serif';ctx.fillText(sub,CW/2,CH*0.53);
   ctx.font=Math.round(CW*0.04)+'px sans-serif';ctx.fillText('タップでもう一度',CW/2,CH*0.6);
