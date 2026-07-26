@@ -261,8 +261,8 @@ function drawBgPhrase(){
   if(k < 34) a = k/34; else if(k > 186) a = (220-k)/34;   // フェードイン／アウト
   const n = bgPhrase.length, fs = Math.min(27, Math.floor((W-20)/n));
   ctx.save();
-  ctx.globalAlpha = 0.17 * Math.max(0, a);
-  ctx.fillStyle = '#e8d9a8';
+  ctx.globalAlpha = 0.34 * Math.max(0, a);
+  ctx.fillStyle = '#f0e2b0';
   ctx.font = fs + 'px "Yu Mincho",serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(bgPhrase, W/2, H*0.60);
@@ -1678,7 +1678,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v32', s:24, gap:30},
+      {t:'書類インベーダー　v33', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1723,7 +1723,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v32", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v33", 5, 9);
   ctx.restore();
 }
 
