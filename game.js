@@ -75,9 +75,9 @@ let chosaReady = false;
 chosa.onload = ()=> chosaReady = true;
 chosa.src = "assets/chosa.png";
 
-// 裏面のザコ（税務調査官風のピクセルキャラ4種）
-const ZAKO = [new Image(), new Image(), new Image(), new Image()];
-const ZAKO_READY = [false, false, false, false];
+// 裏面のザコ（税務調査官風のピクセルキャラ9種／後半5種はエリートで硬い）
+const ZAKO = Array.from({ length: 9 }, ()=> new Image());
+const ZAKO_READY = Array.from({ length: 9 }, ()=> false);
 ZAKO.forEach((im, i)=>{ im.onload = ()=> ZAKO_READY[i] = true; im.src = 'assets/zako' + (i+1) + '.png'; });
 
 // 裏面ボスの昇格ラダー（税務署の役職10段階）
@@ -180,19 +180,21 @@ function makeUraWave(n){
   enemies = [];
   const cols = 7, rows = Math.min(3 + Math.floor(n/6), 5);
   const gapX = 42, gapY = 32, x0 = (W - (cols-1)*gapX)/2, y0 = 84;
-  const baseHp = 1 + Math.floor(n/16);               // 面が進むと基礎HP増
+  const baseHp = 1 + Math.floor(n/13);               // 面が進むと基礎HP増（少し硬く）
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
       const tough = (r === 0);
-      const sprite = (r*2 + c) % 4;
-      let hp = baseHp + (tough ? 1 + Math.min(2, Math.floor(n/8)) : 0);
+      const sprite = (r*2 + c) % 9;                    // 9種
+      const tr = sprite % 4;                           // 特性は4種を循環
+      const elite = sprite >= 4;                       // 後半5種はエリート（硬い・高得点）
+      let hp = baseHp + (tough ? 1 + Math.min(2, Math.floor(n/8)) : 0) + (elite ? 1 : 0);
       const e = { x: x0 + c*gapX, y: y0 + r*gapY, w: 26, h: 20, alive: true,
-                  kind: (r + c) % 3, sprite: sprite, pt: 20 + n, f: 0,
+                  kind: (r + c) % 3, sprite: sprite, pt: 20 + n + (elite ? 15 : 0), f: 0,
                   hp: hp, maxhp: hp, hurt: 0, float: false };
-      // sprite別の特性
-      if(sprite === 1){ e.hp += 1; e.maxhp += 1; }     // 黒クリップボード＝装甲（硬い）
-      if(sprite === 3){ e.pt += 15; }                  // 帳簿＝高得点
-      if(sprite === 0){                                // カバン＝機動（常にフロートで大きく蛇行）
+      // 特性（sprite%4）
+      if(tr === 1){ e.hp += 1; e.maxhp += 1; }         // 装甲（硬い）
+      if(tr === 3){ e.pt += 15; }                      // 高得点
+      if(tr === 0){                                    // 機動（常にフロートで大きく蛇行）
         e.float = true; e.t = Math.floor(Math.random()*100);
         e.amp = 34 + Math.random()*40;
         e.cx = Math.max(16 + e.amp, Math.min(W - 16 - e.amp, e.x));
@@ -238,7 +240,7 @@ function updateFloaters(live){
 function enemyFire(live){
   let rate, bspd, aimCh;
   if(ura){
-    rate  = Math.min(.10, .02 + uraStage*.004);
+    rate  = Math.min(.11, .024 + uraStage*.0045);
     bspd  = Math.min(5.2, 2.6 + uraStage*.06);
     aimCh = Math.min(.85, .2 + uraStage*.03);
   } else {
@@ -264,7 +266,7 @@ function enemyFire(live){
   }
   // メガネ星バッジ＝射撃特化：自機を狙って追加で撃つ
   if(ura){
-    const snipers = live.filter(e => e.sprite === 2);
+    const snipers = live.filter(e => e.sprite % 4 === 2);
     if(snipers.length && Math.random() < .02 + uraStage*.0022){
       const s = snipers[Math.floor(Math.random()*snipers.length)];
       const a = Math.atan2(player.y - s.y, player.x - s.x);
@@ -604,6 +606,11 @@ const DEX = [
   {id:'z1', name:'調査官（実地）', desc:'書類をチェックする実地調査担当'},
   {id:'z2', name:'調査官（鋭眼）', desc:'鋭い指摘で不正を見抜く'},
   {id:'z3', name:'調査官（帳簿）', desc:'帳簿を読み込むベテラン'},
+  {id:'z4', name:'幹部（金装）', desc:'金モールをまとった上級幹部'},
+  {id:'z5', name:'制帽の官', desc:'制帽をかぶった国税の官'},
+  {id:'z6', name:'私服査察官', desc:'私服で内偵する査察官'},
+  {id:'z7', name:'勲章の幹部', desc:'勲章を帯びた高級幹部'},
+  {id:'z8', name:'高官', desc:'飾緒と勲章の最高幹部'},
   {id:'r0', name:'国税調査官', desc:'税務調査の第一線を担う職員'},
   {id:'r1', name:'上席国税調査官', desc:'調査官を束ねる上席'},
   {id:'r2', name:'統括国税調査官', desc:'部門を統括するまとめ役'},
@@ -1598,7 +1605,7 @@ function drawDoc(e){
 
 // 裏面ザコ＝税務調査官風ピクセルキャラ（4種）
 function drawZako(e){
-  const idx = e.sprite % 4, img = ZAKO[idx], ready = ZAKO_READY[idx];
+  const idx = e.sprite % ZAKO.length, tr = e.sprite % 4, img = ZAKO[idx], ready = ZAKO_READY[idx];
   if(e.maxhp > 1){   // 固い敵：朱のオーラ
     ctx.fillStyle = 'rgba(192,57,43,.22)';
     ctx.beginPath(); ctx.arc(e.x, e.y, 16, 0, Math.PI*2); ctx.fill();
@@ -1621,10 +1628,10 @@ function drawZako(e){
   if(e.maxhp > 1){   // 残り耐久ピップ
     for(let i=0;i<e.hp;i++){ ctx.fillStyle = '#c0392b'; ctx.fillRect(e.x - 11 + i*4, e.y - 16, 2.5, 2.5); }
   }
-  if(idx === 2){     // 射撃特化＝赤い照準ドット
+  if(tr === 2){     // 射撃特化＝赤い照準ドット
     ctx.fillStyle = 'rgba(255,82,82,' + (.5 + .4*Math.sin(frame/6)) + ')';
     ctx.beginPath(); ctx.arc(e.x, e.y - 15, 2, 0, Math.PI*2); ctx.fill();
-  } else if(idx === 3){   // 高得点＝¥のきらめき
+  } else if(tr === 3){   // 高得点＝¥のきらめき
     ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 8px serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('¥', e.x + 11, e.y - 12);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -2010,24 +2017,24 @@ function drawDex(){
   const cnt = DEX.filter(d => dex[d.id]).length;
   ctx.fillStyle = '#d8b45c'; ctx.font = 'bold 15px "Yu Mincho",serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText('税務署ランク図鑑　' + cnt + '/' + DEX.length, W/2, 10);
-  let y = 34;
-  for(const d of DEX){
-    const got = !!dex[d.id];
-    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(8, y, 34, 34);
+  const cols = 2, rows = Math.ceil(DEX.length/cols), top = 30, rowH = (H - 44 - top)/rows, colW = W/cols;
+  DEX.forEach((d, i)=>{
+    const cx = (i%cols)*colW + 6, cy = top + Math.floor(i/cols)*rowH;
+    const got = !!dex[d.id], ps = Math.min(30, rowH - 8);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(cx, cy, ps, ps);
     if(got && dexReady(d.id)){
-      const img = dexImg(d.id), asp = img.height ? img.width/img.height : 1, h = 32, w = h*asp;
-      ctx.drawImage(img, 8 + 17 - w/2, y + 1, w, h);
+      const img = dexImg(d.id), asp = img.height ? img.width/img.height : 1, h = ps - 2, w = h*asp;
+      ctx.drawImage(img, cx + ps/2 - w/2, cy + 1, w, h);
     } else {
-      ctx.fillStyle = '#2a3550'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('？', 25, y + 18);
+      ctx.fillStyle = '#2a3550'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('？', cx + ps/2, cy + ps/2);
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = got ? '#ede4d3' : '#5a6a86'; ctx.font = 'bold 12px "Yu Mincho",serif';
-    ctx.fillText(got ? d.name : '？？？', 50, y + 9);
-    ctx.fillStyle = got ? 'rgba(237,228,211,.7)' : '#3a4966'; ctx.font = '9px system-ui,sans-serif';
-    ctx.fillText(got ? d.desc : '撃破で解禁', 50, y + 25);
-    y += 38;
-  }
+    ctx.fillStyle = got ? '#ede4d3' : '#5a6a86'; ctx.font = 'bold 11px "Yu Mincho",serif';
+    ctx.fillText(got ? d.name : '？？？', cx + ps + 5, cy + 8);
+    ctx.fillStyle = got ? 'rgba(237,228,211,.65)' : '#3a4966'; ctx.font = '8px system-ui,sans-serif';
+    ctx.fillText(got ? d.desc : '撃破で解禁', cx + ps + 5, cy + 22);
+  });
   ctx.fillStyle = 'rgba(237,228,211,.8)'; ctx.font = '10px system-ui,sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('タップ / キーで戻る', W/2, H - 6);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -2178,7 +2185,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v43', s:24, gap:30},
+      {t:'書類インベーダー　v44', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2238,7 +2245,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v43", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v44", 5, 9);
   ctx.restore();
 }
 
