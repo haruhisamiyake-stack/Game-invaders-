@@ -80,6 +80,21 @@ const ZAKO = [new Image(), new Image(), new Image(), new Image()];
 const ZAKO_READY = [false, false, false, false];
 ZAKO.forEach((im, i)=>{ im.onload = ()=> ZAKO_READY[i] = true; im.src = 'assets/zako' + (i+1) + '.png'; });
 
+// 裏面ボスの昇格ラダー（税務署の役職6段階）
+const RANK_IMG = [0,1,2,3,4,5].map(()=> new Image());
+const RANK_READY = [false, false, false, false, false, false];
+RANK_IMG.forEach((im, i)=>{ im.onload = ()=> RANK_READY[i] = true; im.src = 'assets/rank' + (i+1) + '.png'; });
+const RANK_NAME = ['国税調査官', '上席国税調査官', '統括国税調査官', '特別国税調査官', '副署長', '税務署長'];
+const RANK_ASP  = [0.566, 0.713, 0.897, 0.816, 0.547, 0.925];   // 幅/高さ
+const RANK_LINES = [
+  ['この経費、説明できますか？', '記録はありますか？', '……確認します'],
+  ['帳簿を見せてください', '数字が合いませんね', '見過ごせません'],
+  ['認印の重み、分かるか？', '追徴、覚悟せよ', 'まだ終わらんぞ'],
+  ['隠しても無駄だ', '証拠は挙がっている', '逃がさん'],
+  ['副署長として看過できません', '厳正に調査します', '観念なさい'],
+  ['税務署長だ。逃げ場はない', '国税の威信にかけて', '……見のがさん']
+];
+
 let state = 'title';       // title | play | over | win | uraAsk
 let wave = 1, score = 0, lives = 3;
 let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑魚のみ・面ごとに難化）
@@ -334,8 +349,18 @@ function handleUraAsk(p){
   else if(inRect(p, NOBTN)) state = 'win';
 }
 
-function makeBoss(type){
+function makeBoss(type, arg){
   barriers = [];   // ボス戦では防壁なし
+  if(type === 'rank'){
+    // 裏面ボスの昇格ラダー（役職が上がるほど大きく・タフ・攻撃的）
+    const idx = arg | 0, asp = RANK_ASP[idx];
+    const h = 150 + idx*8, w = h * asp, y = 46 + h/2;
+    const hp = 90 + idx*40 + uraStage*4;
+    bossObj = { type: 'rank', rank: idx, finale: uraStage === 100, x: W/2, y: y, y0: y, w: w, h: h, hp: hp, max: hp,
+                t: 0, cool: Math.max(22, 56 - uraStage - idx*3), hurt: 0, next: hp - 12,
+                mslCool: Math.max(70, 150 - uraStage - idx*8), spCool: Math.max(56, 120 - idx*8) };
+    return;
+  }
   if(type === 'mid'){
     // 中ボス：単形態。復活なし、鼻ビームなし
     bossObj = { type: 'mid', x: W/2, y: 96, y0: 96, w: 96, h: 73, hp: 50, max: 50,
@@ -667,7 +692,7 @@ function updateBeam(){
       bossObj.hurt = 4;
       if(bossObj.hp <= 0 && state === 'play'){
         if(bossObj.type === 'mid') midDefeated();
-        else if(bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei') uraBossDefeated();
+        else if(bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') uraBossDefeated();
         else bossDown();
       }
     }
@@ -780,17 +805,12 @@ function updateSwarm(){
     if(ura){                                   // 裏面：全100面。クリアで次面へ
       if(uraStage >= 100){ uraAllClear(); return; }
       uraStage++;
-      if(uraStage === 100){                     // 裏ラスボス：国税局長
-        makeBoss('kokuzei'); player.inv = 60;
-        setMsg('裏ラスボス　国税局長 参上', 140);
-        beep(160, .6, 'sawtooth', .07); beep(90, .7, 'square', .05);
-        return;
-      }
-      if(uraStage % 10 === 0){                  // 10面ごとに裏中ボス（女将⇄調査官で交互）
-        const kousaiTurn = ((uraStage / 10) % 2 === 1);   // 裏10=女将 裏20=調査官 裏30=女将…
-        makeBoss(kousaiTurn ? 'kousai' : 'chosa'); player.inv = 60;
-        setMsg('裏中ボス　' + (kousaiTurn ? '交際費の女将' : '税務調査官'), 120);
-        beep(200, .5, 'sawtooth', .06);
+      if(uraStage % 10 === 0){                  // 10面ごとに昇格ボス（役職6段階のラダー）
+        const finale = uraStage === 100;
+        const idx = finale ? 5 : ((uraStage / 10) - 1) % 6;   // 裏10=調査官…裏60=署長, 以降くり返し。裏100=署長
+        makeBoss('rank', idx); player.inv = 60;
+        setMsg((finale ? '裏ラスボス　' : '裏中ボス　') + RANK_NAME[idx] + (finale ? ' 参上' : ''), finale ? 140 : 120);
+        if(finale){ beep(160, .6, 'sawtooth', .07); beep(90, .7, 'square', .05); } else beep(200, .5, 'sawtooth', .06);
         return;
       }
       makeUraWave(uraStage); player.inv = 60;
@@ -869,7 +889,7 @@ function updateSwarm(){
 
 function updateBoss(){
   const b = bossObj;
-  if(b.type === 'mid' || b.type === 'kousai' || b.type === 'chosa' || b.type === 'kokuzei'){ updateMidBoss(b); return; }
+  if(b.type === 'mid' || b.type === 'kousai' || b.type === 'chosa' || b.type === 'kokuzei' || b.type === 'rank'){ updateMidBoss(b); return; }
   const p3 = b.phase === 3;
   b.t += p3 ? 2 : 1;                       // 第三形態は動きも約2倍速
   b.x = W/2 + Math.sin(b.t/60) * (W/2 - 60);
@@ -940,6 +960,7 @@ function updateBoss(){
 function updateMidBoss(b){
   b.t++;
   b.x = W/2 + Math.sin(b.t/55) * (W/2 - 55);
+  b.x = Math.max(b.w/2 + 4, Math.min(W - b.w/2 - 4, b.x));   // 大きいボスも画面内に収める
   b.y = (b.y0 || 96) + Math.sin(b.t/80) * 14;
   if(b.hurt > 0) b.hurt--;
 
@@ -963,7 +984,7 @@ function updateMidBoss(b){
     beep(520, .12, 'square', .04);
   }
   // ボス固有武器
-  if(b.type === 'kousai' || b.type === 'chosa' || b.type === 'kokuzei'){
+  if(b.type === 'kousai' || b.type === 'chosa' || b.type === 'kokuzei' || b.type === 'rank'){
     b.spCool--;
     if(b.spCool <= 0){
       const rage = b.hp < b.max/2;
@@ -978,10 +999,11 @@ function updateMidBoss(b){
         }
         beep(880, .1, 'sine', .05); beep(1180, .08, 'sine', .04);
       } else {
-        // 追徴スタンプ：認印「追」を投げつける（重く速い／国税局長は多め）
-        const big = b.type === 'kokuzei';
-        b.spCool = big ? (rage ? 60 : 90) : (rage ? 95 : 140);
-        const n = big ? (rage ? 6 : 5) : (rage ? 4 : 3), sp = big ? 3.0 : 2.7;
+        // 追徴スタンプ：認印「追」を投げつける（役職が上がるほど多く速い）
+        const rk = b.type === 'rank' ? b.rank : (b.type === 'kokuzei' ? 5 : 2);
+        const big = rk >= 4;
+        b.spCool = big ? (rage ? 58 : 88) : (rage ? 95 : 140);
+        const n = Math.min(7, 2 + Math.floor(rk) + (rage ? 1 : 0)), sp = 2.6 + rk*0.08;
         for(let i=0;i<n;i++){
           const a = aim + (i-(n-1)/2)*.20;
           ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, kind: 3 });
@@ -1211,7 +1233,7 @@ function drawMorph(){
 
 // 裏中ボス（交際費の女将）撃破 → 次の裏面へ
 function uraBossDefeated(){
-  const nm = (bossObj && bossObj.type === 'chosa') ? '税務調査官' : '交際費の女将';
+  const nm = bossObj ? (bossObj.type === 'rank' ? RANK_NAME[bossObj.rank] : bossObj.type === 'chosa' ? '税務調査官' : '交際費の女将') : '';
   score += 800; shake = 18; flash = 12;
   beep(660, .4, 'triangle', .06); beep(990, .3, 'triangle', .05);
   bossObj = null; missiles = []; ebullets = [];
@@ -1521,9 +1543,31 @@ function drawKokuzeiBoss(b){
   ctx.textAlign = 'center'; ctx.fillText('裏ラスボス　国税局長', W/2, by - 6);
   drawBossSpeech(b, BOSS_LINES.kokuzei);
 }
+function drawRankBoss(b){
+  const idx = b.rank, img = RANK_IMG[idx], ready = RANK_READY[idx];
+  const x = b.x - b.w/2, y = b.y - b.h/2, boss6 = idx === 5, finale = b.finale;
+  if(boss6){   // 税務署長＝金の威圧オーラ
+    ctx.strokeStyle = 'rgba(216,180,92,' + (.5 + .3*Math.sin(frame/8)) + ')'; ctx.lineWidth = 3;
+    ctx.strokeRect(x-2, y-2, b.w+4, b.h+4);
+  }
+  if(ready){
+    if(b.hurt > 0) ctx.globalAlpha = .55;
+    ctx.drawImage(img, x, y, b.w, b.h);
+    ctx.globalAlpha = 1;
+  } else { ctx.fillStyle = '#1b2a4a'; ctx.fillRect(x, y, b.w, b.h); }
+  const bh = boss6 ? 9 : 8, bw = boss6 ? 220 : 200, bx = (W-bw)/2, by = 26;
+  ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = boss6 ? '#d8b45c' : '#c0392b'; ctx.fillRect(bx, by, bw * b.hp/b.max, bh);
+  ctx.strokeStyle = 'rgba(237,228,211,.75)'; ctx.lineWidth = 1; ctx.strokeRect(bx+.5, by+.5, bw-1, bh-1);
+  ctx.fillStyle = boss6 ? '#ffd23f' : '#d8b45c'; ctx.font = (boss6 ? 'bold 10px' : '9px') + ' system-ui,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText((finale ? '裏ラスボス　' : '裏中ボス　') + RANK_NAME[idx], W/2, by - 6);
+  drawBossSpeech(b, RANK_LINES[idx]);
+}
 function drawBoss(){
   const b = bossObj;
   if(b.type === 'mid'){ drawMidBoss(b); return; }
+  if(b.type === 'rank'){ drawRankBoss(b); return; }
   if(b.type === 'kousai'){ drawKousaiBoss(b); return; }
   if(b.type === 'chosa'){ drawChosaBoss(b); return; }
   if(b.type === 'kokuzei'){ drawKokuzeiBoss(b); return; }
@@ -1702,7 +1746,7 @@ function drawHUD(){
   ctx.textAlign = 'left';  ctx.fillText('SCORE ' + score, 8, H-12);
   ctx.textAlign = 'right';
   ctx.fillText(bossObj
-    ? (bossObj.type === 'last' ? 'FINAL' : (bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei') ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
+    ? (bossObj.type === 'last' ? 'FINAL' : (bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
     : (ura ? '裏 ' + uraStage + '/100' : 'STAGE ' + wave + '/5'), W-8, H-12);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#c0392b';
@@ -1883,7 +1927,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v37', s:24, gap:30},
+      {t:'書類インベーダー　v38', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1940,7 +1984,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v37", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v38", 5, 9);
   ctx.restore();
 }
 
