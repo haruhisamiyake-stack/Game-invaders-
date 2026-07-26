@@ -511,13 +511,25 @@ function updateAlly(){
   ally--;
   if(ally <= 0){ allyN = 0; return; }
   const offs = allyOffsets();
-  // 法人化（3体）＝三位一体砲：ブランドカラーの太い弾を定期発射
-  if(allyN >= 3 && ally % 18 === 0){
-    const cols = ['#e8a838','#e07b2c','#7cb342'];   // 黄・橙・緑（アストラスト）
-    for(let i=0;i<3;i++){
-      bullets.push({ x: player.x + (i-1)*10, y: player.y - 40, w: 12, h: 16, vx: 0, dmg: 4, gold: true, big: true, corp: cols[i] });
+  // ===== 法人化（3体）＝アストラスト大火力 =====
+  if(allyN >= 3){
+    const cols = ['#f0b429','#e8721c','#7cb342'];   // 黄・橙・緑（アストラスト）
+    // トリニティ弾幕：ブランド3色の極太ビーム弾を広い扇状に高速連射
+    if(frame % 5 === 0){
+      for(let i=-4;i<=4;i++){
+        bullets.push({ x: player.x, y: player.y - 46, w: 9, h: 22, vx: i*0.95, dmg: 3, gold: true, big: true, corp: cols[(i+4)%3] });
+      }
+      beep(1174, .03, 'sawtooth', .04);
     }
-    beep(880,.05,'sawtooth',.05);
+    // アストラスト・キャノン：約0.8秒ごとに画面を薙ぐ特大3連ビーム
+    if(ally % 48 === 0){
+      shake = Math.max(shake, 9); flash = Math.max(flash, 7);
+      for(let i=0;i<3;i++){
+        bullets.push({ x: player.x + (i-1)*24, y: player.y - 54, w: 22, h: 34, vx: (i-1)*0.35, dmg: 9, gold: true, big: true, corp: cols[i], mega: true });
+        addBurst(player.x + (i-1)*24, player.y - 54, cols[i], 8);
+      }
+      beep(330, .16, 'sawtooth', .06); beep(494, .16, 'sawtooth', .05); beep(660, .18, 'square', .05);
+    }
   }
   // 金の高速連射（各税理士から5WAY扇状の弾幕）
   if(frame % 4 === 0){
@@ -2224,11 +2236,17 @@ function draw(){
     if(barriers.length) drawBarriers();
 
     bullets.forEach(b => {
-      if(b.corp){   // 法人化・三位一体砲（ブランドカラーの太弾）
-        const s = 10;
-        ctx.fillStyle = b.corp + '55'; ctx.beginPath(); ctx.arc(b.x, b.y, s+3, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = b.corp; ctx.beginPath(); ctx.arc(b.x, b.y, s*0.7, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, s*0.3, 0, Math.PI*2); ctx.fill();
+      if(b.corp){   // 法人化・アストラスト砲（ブランドカラーの光ビーム＋尾）
+        const s = b.mega ? 13 : 7, len = b.mega ? 30 : 18;
+        // 光の尾
+        const grad = ctx.createLinearGradient(b.x, b.y - len, b.x, b.y + s);
+        grad.addColorStop(0, b.corp + '00'); grad.addColorStop(1, b.corp + 'dd');
+        ctx.fillStyle = grad; ctx.fillRect(b.x - s*0.45, b.y - len, s*0.9, len);
+        // 外光
+        ctx.fillStyle = b.corp + '55'; ctx.beginPath(); ctx.ellipse(b.x, b.y, s+3, s+5, 0, 0, Math.PI*2); ctx.fill();
+        // 芯
+        ctx.fillStyle = b.corp; ctx.beginPath(); ctx.ellipse(b.x, b.y, s*0.72, s, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(b.x, b.y, s*0.3, s*0.52, 0, 0, Math.PI*2); ctx.fill();
       }
       else if(b.gold){   // 税理士の金弾（光背＋白芯できらびやか）
         const s = b.big ? 9 : 6;
@@ -2340,7 +2358,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v55', s:24, gap:30},
+      {t:'書類インベーダー　v56', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2400,7 +2418,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v55", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v56", 5, 9);
   ctx.restore();
 }
 
