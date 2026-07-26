@@ -119,7 +119,6 @@ const ITEMS = [
   { k:'shield', label:'受', name:'受理印', col:'#b8912f' },
   { k:'heal',   label:'薬', name:'回復薬', col:'#3aa76d' },   // ライフ回復（緑）
   { k:'bunshin',label:'分', name:'分身',   col:'#5aa9e6' },   // 僚機（水色）
-  { k:'aoiro',  label:'青', name:'青色申告', col:'#4a90d9' },  // 受理印を最大2枚に強化
   { k:'etax',   label:'e', name:'e-Tax',   col:'#39c8c0' },  // 超連射
   { k:'kojo',   label:'控', name:'税額控除', col:'#e0b83a' }   // 一定時間スコア2倍
 ];
@@ -614,12 +613,12 @@ function shoot(){
 /* ---------- パワーアップ ---------- */
 function maybeDrop(x, y, rate){
   if(Math.random() > (rate === undefined ? .14 : rate)) return;
-  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身/青色申告/e-Tax/税額控除
+  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身/e-Tax/税額控除
   // 回復薬は満タン時は出さない。分身は最大時は出さない。
   const w = [15, 13, 12, 11,
              lives < MAX_LIVES ? 8 : 0,
              player.wings < MAX_WINGS ? 11 : 0,
-             10, 9, 9];
+             9, 9];
   const total = w.reduce((a, b) => a + b, 0);
   let r = Math.random()*total, i = 0;
   while(r > w[i] && i < w.length-1){ r -= w[i]; i++; }
@@ -638,7 +637,6 @@ function pickUp(it){
     return;
   }
   else if(d.k === 'shield'){ player.shield = Math.max(player.shield, 1); }
-  else if(d.k === 'aoiro'){ player.shield = Math.min(2, player.shield + 2); setMsg('青色申告　受理印' + player.shield + '枚', 28); }
   else if(d.k === 'etax'){ player.etaxT = 600; setMsg('e-Tax　超連射', 26); }
   else if(d.k === 'kojo'){ player.kojoT = 600; setMsg('税額控除　スコア2倍', 26); }
   else if(d.k === 'heal'){
@@ -1715,8 +1713,8 @@ function drawChips(){
   if(player.inkT > 0)    on.push({ d: ITEMS[2], t: player.inkT/600 });
   if(player.shield > 0)  on.push({ d: ITEMS[3], t: 1, tag: player.shield + '枚' });
   if(player.wings > 0)   on.push({ d: ITEMS[5], t: 1, tag: player.wings + '機' });
-  if(player.etaxT > 0)   on.push({ d: ITEMS[7], t: player.etaxT/600 });
-  if(player.kojoT > 0)   on.push({ d: ITEMS[8], t: player.kojoT/600 });
+  if(player.etaxT > 0)   on.push({ d: ITEMS[6], t: player.etaxT/600 });
+  if(player.kojoT > 0)   on.push({ d: ITEMS[7], t: player.kojoT/600 });
   on.forEach((o, i)=>{
     const x = 8 + i*40, y = H-80;   // 自機（最下段）と重ならないよう一段上へ
     ctx.fillStyle = 'rgba(14,23,48,.6)'; ctx.fillRect(x, y, 36, 14);
@@ -1927,7 +1925,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v38', s:24, gap:30},
+      {t:'書類インベーダー　v39', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1984,7 +1982,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v38", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v39", 5, 9);
   ctx.restore();
 }
 
