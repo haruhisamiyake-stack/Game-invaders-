@@ -120,6 +120,7 @@ let ally = 0, allyN = 0;                           // 税理士お助け：残�
 let corpT = 0;                                     // 法人化バナー演出タイマー
 let bigT = 0, bigMax = 0, bigTxt = '';             // 大見得テキスト（ボスの決めゼリフ）
 function bigMsg(txt, t){ bigTxt = txt; bigT = bigMax = t; }
+let kcutT = 0, kcutMax = 0;                         // かんた登場カットイン
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let minions = [];    // 表ラスボス第三形態の応援＝小型所長×2
@@ -415,6 +416,39 @@ function drawCutin(){
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 
+/* ---------- かんた登場カットイン（第三形態突入） ---------- */
+function startKantaCutin(){ kcutMax = kcutT = 96; shake = 12; beep(240, .4, 'square', .05); beep(160, .5, 'sawtooth', .05); }
+function drawKantaCutin(){
+  const t = kcutMax - kcutT, k = t / kcutMax;
+  const slide = Math.min(1, t/14) * (kcutT < 14 ? kcutT/14 : 1);   // 出て→引く
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,16,28,' + Math.min(.82, k*2) + ')'; ctx.fillRect(0, 0, W, H);
+  const cy = H*0.42, bh = 118;
+  ctx.fillStyle = '#0a1524'; ctx.fillRect(0, cy - bh/2, W, bh);
+  ctx.fillStyle = '#c0392b'; ctx.fillRect(0, cy - bh/2, W, 3); ctx.fillRect(0, cy + bh/2 - 3, W, 3);
+  // かんた（第三形態）が右からスライドイン
+  if(boss3Ready){
+    const h = 132, w = h * (boss3.width/boss3.height || .9);
+    ctx.globalAlpha = slide;
+    ctx.drawImage(boss3, W - 6 - w - (1-slide)*(-46), cy - h/2, w, h);
+    ctx.globalAlpha = 1;
+  }
+  // 左にセリフ
+  const a = Math.min(1, t/12) * (kcutT < 12 ? kcutT/12 : 1);
+  ctx.globalAlpha = a;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 11px system-ui,sans-serif';
+  ctx.fillText('所長の秘蔵っ子　かんた', 16, cy - 40);
+  ctx.font = 'bold 27px "Yu Mincho",serif';
+  const sh = t < 12 ? (Math.random()*3-1.5) : 0;
+  ctx.lineWidth = 5; ctx.strokeStyle = '#2a0d0d';
+  ctx.strokeText('とうちゃんを', 16 + sh, cy - 8); ctx.strokeText('いじめるな！', 16 + sh, cy + 26);
+  ctx.fillStyle = '#ff5252';
+  ctx.fillText('とうちゃんを', 16 + sh, cy - 8); ctx.fillText('いじめるな！', 16 + sh, cy + 26);
+  ctx.globalAlpha = 1; ctx.restore();
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+
 /* ---------- ボス大技（役職別） ---------- */
 function updateRankUlt(b){   // 差押えビームの状態機械（発射は rankAttack が startBeam で開始）
   if(!b.ult) return;
@@ -638,6 +672,7 @@ function bossDown(){
     b.beamState = 0; b.beamCool = 130; b.beamT = 0; b.beamX = b.x;   // 鼻ビーム初期化
     score += 500; shake = 22; flash = 14;
     setMsg('第三形態　かんた登場！鼻からたま・ビーム', 150);
+    startKantaCutin();   // 「とうちゃんをいじめるな！」カットイン
     beep(220, .5, 'sawtooth', .06); beep(330, .5, 'square', .05); beep(160, .6, 'triangle', .05);
     startMorph(3);   // 変身演出（紫の墨）
   } else {
@@ -650,7 +685,7 @@ function reset(){
   ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
-  mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; bigT = 0; cutinT = 0;
+  mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; bigT = 0; kcutT = 0; cutinT = 0;
   bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -988,6 +1023,7 @@ function update(){
   if(state !== 'play') return;
   if(paused) return;                         // 一時停止中は進行を止める（描画は継続）
   if(cutinT > 0){ cutinT--; return; }        // 昇格カットイン中は進行停止
+  if(kcutT > 0){ kcutT--; return; }          // かんた登場カットイン中は進行停止
   if(introT > 0){ updateIntro(); return; }   // ラスボス登場演出（インクブリード）中は進行停止
   if(morphT > 0){ morphT--; return; }        // 形態変化演出中は進行停止
   if(overT > 0){ updateGameOver(); return; } // ゲームオーバー演出中
@@ -2457,6 +2493,7 @@ function draw(){
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     if(corpT > 0) drawCorpBanner();   // 法人化バナー
     if(bigT > 0) drawBigMsg();        // ボスの決めゼリフ（大見得）
+    if(kcutT > 0) drawKantaCutin();   // かんた登場カットイン
     if(cutinT > 0) drawCutin();   // 昇格カットイン
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
     if(morphT > 0) drawMorph();   // 形態変化演出
@@ -2484,7 +2521,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v65', s:24, gap:30},
+      {t:'書類インベーダー　v66', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2544,7 +2581,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v65", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v66", 5, 9);
   ctx.restore();
 }
 
