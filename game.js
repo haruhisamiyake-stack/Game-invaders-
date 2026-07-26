@@ -886,7 +886,7 @@ function updateBeam(){
     if(Math.abs(bossObj.x - b.x) < half + bossObj.w/2 - 12){
       b.acc += b.power * .22 / b.maxlife;
       while(b.acc >= 1 && bossObj.hp > 0){ b.acc--; bossObj.hp--; score += 5; }
-      if(bossObj.hp <= bossObj.next){ bossObj.next -= 15; maybeDrop(bossObj.x, bossObj.y + 30, 1); }
+      if(bossObj.hp <= bossObj.next){ bossObj.next -= 60; maybeDrop(bossObj.x, bossObj.y + 30, 1); }
       bossObj.hurt = 4;
       if(bossObj.hp <= 0 && state === 'play'){
         if(bossObj.type === 'mid') midDefeated();
@@ -1152,7 +1152,7 @@ function updateBoss(){
   for(const bl of bullets){
     if(Math.abs(bl.x - b.x) < b.w/2 - 6 && Math.abs(bl.y - b.y) < b.h/2 - 6){
       bl.dead = true; b.hp -= (bl.dmg || 1); b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
-      if(b.hp <= b.next){ b.next -= 15; maybeDrop(b.x, b.y + 30, 1); }
+      if(b.hp <= b.next){ b.next -= 60; maybeDrop(b.x, b.y + 30, 1); }
       beep(660, .04, 'square', .03);
       if(b.hp <= 0){ bossDown(); break; }
     }
@@ -1206,7 +1206,7 @@ function updateMidBoss(b){
   for(const bl of bullets){
     if(Math.abs(bl.x - b.x) < b.w/2 - 8 && Math.abs(bl.y - b.y) < b.h/2 - 8){
       bl.dead = true; b.hp -= (bl.dmg || 1); b.hurt = 6; score += 5; ki = Math.min(100, ki + .8);
-      if(b.hp <= b.next){ b.next -= 12; maybeDrop(b.x, b.y + 20, 1); }
+      if(b.hp <= b.next){ b.next -= 48; maybeDrop(b.x, b.y + 20, 1); }
       beep(660, .04, 'square', .03);
       if(b.hp <= 0){ (b.type === 'mid' ? midDefeated : uraBossDefeated)(); break; }
     }
@@ -2191,7 +2191,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v48', s:24, gap:30},
+      {t:'書類インベーダー　v49', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2251,7 +2251,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v48", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v49", 5, 9);
   ctx.restore();
 }
 
