@@ -89,6 +89,8 @@ const MAX_LIVES = 5, MAX_WINGS = 2;
 const STAGE_NAMES = ['', '領収書の山', '請求書の束', '帳簿の海', '年末調整', '確定申告'];
 const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
 const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
+const PAUSE = { x: W-58, y: 8, w: 22, h: 22 };   // 一時停止（ミュートの左隣）
+let paused = false;
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
 
 function newPlayer(){
@@ -296,7 +298,7 @@ function bossDown(){
 function reset(){
   wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
   ura = false; uraStage = 0; allClear = false;
-  ki = 45; charge = 0; beam = null; flash = 0; items = [];
+  ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
@@ -376,6 +378,8 @@ function toggleMute(){
 const keys = {};
 addEventListener('keydown', e=>{
   unlockAudio();
+  if(e.code === 'KeyP' || e.code === 'Escape'){ togglePause(); e.preventDefault(); return; }
+  if(paused) return;   // 停止中は他の入力を無視
   keys[e.code] = true;
   if(['ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
   if(state === 'uraAsk'){
@@ -403,11 +407,22 @@ function inBtn(p){
 function inMute(p){
   return p.x > MUTE.x-8 && p.x < MUTE.x+MUTE.w+8 && p.y > MUTE.y-8 && p.y < MUTE.y+MUTE.h+8;
 }
+function inPause(p){
+  return p.x > PAUSE.x-8 && p.x < PAUSE.x+PAUSE.w+8 && p.y > PAUSE.y-8 && p.y < PAUSE.y+PAUSE.h+8;
+}
+function togglePause(){
+  if(state !== 'play') return;
+  paused = !paused;
+  if(paused) bgmStop();
+  else if(!muted) bgmSet(curTrack || 'normal', false);
+}
 cv.addEventListener('pointerdown', e=>{
   unlockAudio();
   const p = pos(e);
   cv.setPointerCapture(e.pointerId);
   if(inMute(p)){ toggleMute(); return; }   // ミュート切替（開始前でも押せる）
+  if(inPause(p)){ togglePause(); return; }  // 一時停止／再開
+  if(paused){ togglePause(); return; }      // 停止中は画面タップで再開
   if(state === 'uraAsk'){ handleUraAsk(p); return; }   // 裏面 突入 Yes/No
   if(state !== 'play'){ tap(); return; }
   if(inBtn(p) && chargePtr === null){ chargePtr = e.pointerId; return; }
@@ -542,6 +557,7 @@ function update(){
   if(shake > 0) shake--;
   if(flash > 0) flash--;
   if(state !== 'play') return;
+  if(paused) return;                         // 一時停止中は進行を止める（描画は継続）
   if(introT > 0){ updateIntro(); return; }   // ラスボス登場演出（インクブリード）中は進行停止
   if(morphT > 0){ morphT--; return; }        // 形態変化演出中は進行停止
   if(overT > 0){ updateGameOver(); return; } // ゲームオーバー演出中
@@ -1404,6 +1420,15 @@ function drawHUD(){
   ctx.fillText(s.trim(), W/2, H-12);
 }
 
+function drawPause(){
+  const b = PAUSE, cx = b.x + b.w/2, cy = b.y + b.h/2;
+  ctx.fillStyle = 'rgba(237,228,211,.7)';
+  if(paused){   // 再開（▶）
+    ctx.beginPath(); ctx.moveTo(cx-4, cy-6); ctx.lineTo(cx-4, cy+6); ctx.lineTo(cx+6, cy); ctx.closePath(); ctx.fill();
+  } else {      // 一時停止（||）
+    ctx.fillRect(cx-5, cy-6, 3.5, 12); ctx.fillRect(cx+1.5, cy-6, 3.5, 12);
+  }
+}
 function drawMute(){
   const cx = MUTE.x + MUTE.w/2, cy = MUTE.y + MUTE.h/2;
   ctx.fillStyle = 'rgba(237,228,211,.7)';
@@ -1487,6 +1512,7 @@ function draw(){
     drawBtn();
     drawChips();
     drawHUD();
+    drawPause();
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
     if(morphT > 0) drawMorph();   // 形態変化演出
     if(overT > 0) drawGameOver(); // ゲームオーバー演出
@@ -1502,9 +1528,18 @@ function draw(){
       ctx.fillText(msg, W/2, H/2);
       ctx.globalAlpha = 1;
     }
+    if(paused){   // 一時停止オーバーレイ
+      ctx.fillStyle = 'rgba(14,23,48,.72)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#d8b45c'; ctx.font = '26px "Yu Mincho",serif';
+      ctx.fillText('一時停止', W/2, H/2 - 14);
+      ctx.fillStyle = 'rgba(237,228,211,.85)'; ctx.font = '12px system-ui,sans-serif';
+      ctx.fillText('タップ / P で再開', W/2, H/2 + 18);
+      drawPause();   // ▶アイコンを最前面に
+    }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v26', s:24, gap:30},
+      {t:'書類インベーダー　v27', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1549,7 +1584,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v26", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v27", 5, 9);
   ctx.restore();
 }
 
