@@ -114,7 +114,7 @@ let dex = {};                                      // 税務署ランク図鑑�
 let cutinT = 0, cutinMax = 0, cutinIdx = 0;        // 昇格カットイン演出
 let mode = 'normal';                               // normal | rush（ボスラッシュ） | time（タイムアタック）
 let taT = 0;                                       // タイムアタック残り（フレーム）
-let ally = 0;                                      // 相棒（士業連携）の残り時間
+let ally = 0, allyN = 0;                           // 税理士お助け：残り時間／体数（最大3）
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
@@ -478,26 +478,40 @@ function splitEnemy(e){
 }
 
 /* ---------- 相棒（士業連携）＝弾消し＋援護射撃 ---------- */
+// 税理士お助けの配置オフセット（体数に応じて左右に展開）
+function allyOffsets(){
+  return allyN >= 3 ? [-42, 0, 42] : allyN === 2 ? [-30, 30] : [0];
+}
 function summonAlly(){
+  allyN = Math.min(3, allyN + 1);   // 最大3体まで重ねられる
   ally = 480;
   ebullets = []; missiles = [];   // 会議で一掃
-  shake = 12; flash = 10; setMsg('税理士 参上！　一括申告砲！', 44);
+  shake = 12; flash = 10;
+  setMsg(allyN >= 3 ? '税理士 3体！　一括申告砲・全開！' : '税理士 参上！（' + allyN + '体）　一括申告砲！', 44);
   beep(660, .12, 'triangle', .06); beep(990, .12, 'triangle', .05); beep(1320, .16, 'sine', .06);
-  // 登場と同時に金の弾を一斉射撃
-  for(let i=0;i<13;i++) bullets.push({ x: player.x, y: player.y - 24, w: 5, h: 13, vx: (i-6)*0.7, dmg: 2, gold: true });
+  // 登場と同時に金の弾を一斉射撃（体数ぶん厚く）
+  const shots = 13 + (allyN - 1) * 6;
+  for(let i=0;i<shots;i++) bullets.push({ x: player.x, y: player.y - 24, w: 5, h: 13, vx: (i-(shots-1)/2)*0.6, dmg: 2, gold: true });
 }
 function updateAlly(){
-  if(ally <= 0) return;
+  if(ally <= 0){ allyN = 0; return; }
   ally--;
-  const gx = player.x, gy = player.y - 30;
-  // 金の高速連射（5WAY扇状の弾幕）
+  if(ally <= 0){ allyN = 0; return; }
+  const offs = allyOffsets();
+  // 金の高速連射（各税理士から5WAY扇状の弾幕）
   if(frame % 4 === 0){
-    for(const vx of [-3.2, -1.6, 0, 1.6, 3.2]) bullets.push({ x: gx, y: gy, w: 5, h: 13, vx, dmg: 2, gold: true });
+    for(const ox of offs){
+      const gx = player.x + ox, gy = player.y - 30;
+      for(const vx of [-3.2, -1.6, 0, 1.6, 3.2]) bullets.push({ x: gx, y: gy, w: 5, h: 13, vx, dmg: 2, gold: true });
+    }
     beep(1046, .03, 'square', .03);
   }
-  // 是認スタンプ砲（大きな金弾を時々ドンと）
+  // 是認スタンプ砲（大きな金弾を時々ドンと・各税理士から）
   if(ally % 26 === 0){
-    for(const vx of [-1, 0, 1]) bullets.push({ x: gx, y: gy, w: 10, h: 10, vx, dmg: 3, gold: true, big: true });
+    for(const ox of offs){
+      const gx = player.x + ox, gy = player.y - 30;
+      for(const vx of [-1, 0, 1]) bullets.push({ x: gx, y: gy, w: 10, h: 10, vx, dmg: 3, gold: true, big: true });
+    }
     beep(760, .08, 'triangle', .05);
   }
   // 定期弾消し（是認！）
@@ -599,7 +613,7 @@ function reset(){
   ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
-  mode = 'normal'; taT = 0; ally = 0; cutinT = 0;
+  mode = 'normal'; taT = 0; ally = 0; allyN = 0; cutinT = 0;
   bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -1691,27 +1705,32 @@ function drawStar(x, y, r){
 }
 function drawAlly(){
   if(ally <= 0) return;
-  const bob = Math.sin(frame/9)*2;
-  const gx = player.x, gy = player.y - 36 + bob;   // 自機の前（上）に税理士が登場
-  // 金の後光
-  ctx.save();
-  const glow = ctx.createRadialGradient(gx, gy, 4, gx, gy, 34);
-  glow.addColorStop(0, 'rgba(255,220,110,' + (.4 + .18*Math.sin(frame/6)) + ')');
-  glow.addColorStop(1, 'rgba(255,210,63,0)');
-  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(gx, gy, 34, 0, Math.PI*2); ctx.fill();
-  ctx.restore();
-  if(zeirishiReady){
-    const asp = zeirishi.height ? zeirishi.width/zeirishi.height : 0.68, h = 58, w = h*asp;
-    ctx.drawImage(zeirishi, gx - w/2, gy - h/2, w, h);
-  }
-  // きらめき（回るスター＋点滅）
-  for(let i=0;i<5;i++){
-    const a = frame/16 + i*1.257, rd = 26 + Math.sin(frame/7 + i)*4;
-    const sx = gx + Math.cos(a)*rd, sy = gy + Math.sin(a)*rd*0.85;
-    ctx.fillStyle = 'rgba(255,244,190,' + (.45 + .45*Math.sin(frame/5 + i*1.3)) + ')';
-    drawStar(sx, sy, 3.2);
-  }
-  ctx.fillStyle = 'rgba(255,255,255,.9)'; drawStar(gx + 14, gy - 18, 2.4 + Math.sin(frame/4));
+  const offs = allyOffsets();
+  const h = allyN >= 3 ? 46 : allyN === 2 ? 52 : 58;   // 体数が多いほど少し小さく
+  const rad = allyN >= 3 ? 27 : 32;
+  offs.forEach((ox, gi)=>{
+    const bob = Math.sin(frame/9 + gi*2.1)*2;
+    const gx = player.x + ox, gy = player.y - 36 + bob;   // 自機の前（上）に税理士が登場
+    // 金の後光
+    ctx.save();
+    const glow = ctx.createRadialGradient(gx, gy, 4, gx, gy, rad);
+    glow.addColorStop(0, 'rgba(255,220,110,' + (.4 + .18*Math.sin(frame/6 + gi)) + ')');
+    glow.addColorStop(1, 'rgba(255,210,63,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(gx, gy, rad, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    if(zeirishiReady){
+      const asp = zeirishi.height ? zeirishi.width/zeirishi.height : 0.68, w = h*asp;
+      ctx.drawImage(zeirishi, gx - w/2, gy - h/2, w, h);
+    }
+    // きらめき（回るスター＋点滅）
+    for(let i=0;i<5;i++){
+      const a = frame/16 + i*1.257 + gi, rd = (rad-6) + Math.sin(frame/7 + i)*4;
+      const sx = gx + Math.cos(a)*rd, sy = gy + Math.sin(a)*rd*0.85;
+      ctx.fillStyle = 'rgba(255,244,190,' + (.45 + .45*Math.sin(frame/5 + i*1.3)) + ')';
+      drawStar(sx, sy, 3.2);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,.9)'; drawStar(gx + 12, gy - 16, 2.4 + Math.sin(frame/4 + gi));
+  });
 }
 function drawPlayer(){
   if(overT > 0) return;   // ゲームオーバー演出中は自機は爆散済み
@@ -1989,7 +2008,7 @@ function drawChips(){
   if(player.wings > 0)   on.push({ d: ITEMS[5], t: 1, tag: player.wings + '機' });
   if(player.etaxT > 0)   on.push({ d: ITEMS[6], t: player.etaxT/600 });
   if(player.kojoT > 0)   on.push({ d: ITEMS[7], t: player.kojoT/600 });
-  if(ally > 0)           on.push({ d: ITEMS[8], t: ally/480 });
+  if(ally > 0)           on.push({ d: ITEMS[8], t: ally/480, tag: allyN + '体' });
   on.forEach((o, i)=>{
     const x = 8 + i*40, y = H-80;   // 自機（最下段）と重ならないよう一段上へ
     ctx.fillStyle = 'rgba(14,23,48,.6)'; ctx.fillRect(x, y, 36, 14);
@@ -2258,7 +2277,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v53', s:24, gap:30},
+      {t:'書類インベーダー　v54', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2318,7 +2337,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v53", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v54", 5, 9);
   ctx.restore();
 }
 
