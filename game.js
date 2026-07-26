@@ -217,7 +217,7 @@ function startUra(){
   player.inv = 90;
   makeUraWave(1); state = 'play';
   setMsg('裏一面　修羅の申告', 100);
-  bgmSet('boss', true);
+  bgmSet('ura', true);
 }
 function uraAllClear(){
   ura = false; allClear = true; score += 5000; saveBest();
@@ -475,7 +475,7 @@ function updateAlly(){
 function startRush(){
   reset(); mode = 'rush'; ura = true; uraStage = 10;
   bossObj = null; enemies = []; makeBoss('rank', 0); startCutin(0);
-  state = 'play'; setMsg('ボスラッシュ！', 70); bgmSet('boss', true);
+  state = 'play'; setMsg('ボスラッシュ！', 70); bgmSet('ura', true);
 }
 function rushBossDefeated(){
   const idx = bossObj ? bossObj.rank : 0;
@@ -656,7 +656,8 @@ function beep(freq, dur, type='square', vol=.05){
 // 複数の<audio>を持たず、単一要素の src を差し替えて曲を切り替える。
 const BGM = {
   normal: { file: 'assets/paperavalanche.mp3', vol: .45 },
-  boss:   { file: 'assets/boss-theme.mp3',     vol: .5  }
+  boss:   { file: 'assets/boss-theme.mp3',     vol: .5  },
+  ura:    { file: 'assets/ura-theme.mp3',      vol: .5  }   // 裏面テーマ
 };
 let muted = false, curTrack = null, bgmAudio = null;
 function bgmAudioEl(){
@@ -2174,7 +2175,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v41', s:24, gap:30},
+      {t:'書類インベーダー　v42', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2234,7 +2235,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v41", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v42", 5, 9);
   ctx.restore();
 }
 
