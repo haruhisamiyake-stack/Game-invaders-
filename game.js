@@ -637,7 +637,7 @@ function bossDown(){
     b.t = 0;
     b.beamState = 0; b.beamCool = 130; b.beamT = 0; b.beamX = b.x;   // 鼻ビーム初期化
     score += 500; shake = 22; flash = 14;
-    setMsg('第三形態！鼻からたま・ビーム', 150);
+    setMsg('第三形態　かんた登場！鼻からたま・ビーム', 150);
     beep(220, .5, 'sawtooth', .06); beep(330, .5, 'square', .05); beep(160, .6, 'triangle', .05);
     startMorph(3);   // 変身演出（紫の墨）
   } else {
@@ -2059,7 +2059,7 @@ function drawBoss(){
   ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
   ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(p3 ? '所長の秘蔵っ子　第三形態' : (p2 ? '所長　三宅 晴久（本気）' : '所長　三宅 晴久'), W/2, by - 6);
+  ctx.fillText(p3 ? '所長の秘蔵っ子　かんた（第三形態）' : (p2 ? '所長　三宅 晴久（本気）' : '所長　三宅 晴久'), W/2, by - 6);
 }
 
 // 鼻からの縦ビーム描画（溜め＝細い警告線／発射＝太い光条）
@@ -2484,7 +2484,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v64', s:24, gap:30},
+      {t:'書類インベーダー　v65', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2544,7 +2544,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v64", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v65", 5, 9);
   ctx.restore();
 }
 
