@@ -606,9 +606,9 @@ function makeBoss(type, arg){
     bossObj = { type: 'kokuzei', x: W/2, y: 122, y0: 122, w: 152, h: 184, hp: hp, max: hp,
                 t: 0, cool: 24, hurt: 0, next: hp - 12, mslCool: 96, spCool: 80 };
   } else {
-    // ラスボス（所長）：3段階。HPは倍設定（歯ごたえ重視）
-    bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 140, max: 140,
-                t: 0, cool: 60, hurt: 0, next: 125, phase: 1 };
+    // ラスボス（所長）：3段階。HPは5倍設定（歯ごたえ重視）
+    bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 700, max: 700,
+                t: 0, cool: 60, hurt: 0, next: 685, phase: 1 };
   }
 }
 
@@ -617,7 +617,7 @@ function bossDown(){
   const b = bossObj;
   if(b.phase === 1){
     b.phase = 2;
-    b.hp = b.max = 160;         // 第二形態はHP増（倍）
+    b.hp = b.max = 800;         // 第二形態はHP増（5倍）
     b.next = b.max - 15;
     b.hurt = 16; b.cool = 100;  // 復活直後は少し間を置く
     b.t = 0;
@@ -628,7 +628,7 @@ function bossDown(){
     // BGMはボス曲を継続（頭出しし直したい場合は bgmSet('boss', true)）
   } else if(b.phase === 2){
     b.phase = 3;
-    b.hp = b.max = 180;         // 第三形態はさらにHP増（倍）
+    b.hp = b.max = 900;         // 第三形態はさらにHP増（5倍）
     b.next = b.max - 15;
     b.hurt = 18; b.cool = 90;
     b.t = 0;
@@ -2377,7 +2377,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v58', s:24, gap:30},
+      {t:'書類インベーダー　v59', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2437,7 +2437,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v58", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v59", 5, 9);
   ctx.restore();
 }
 
