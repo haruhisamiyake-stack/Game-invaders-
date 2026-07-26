@@ -63,8 +63,9 @@ let midbossReady = false;
 midboss.onload = ()=> midbossReady = true;
 midboss.src = "assets/midboss.png";
 
-let state = 'title';       // title | play | clear | over | win
+let state = 'title';       // title | play | over | win | uraAsk
 let wave = 1, score = 0, lives = 3;
+let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑魚のみ・面ごとに難化）
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let midDone = false;   // 中ボスを倒したか
@@ -81,8 +82,7 @@ const ITEMS = [
   { k:'ink',    label:'朱', name:'朱肉',   col:'#c0392b' },
   { k:'shield', label:'受', name:'受理印', col:'#b8912f' },
   { k:'heal',   label:'薬', name:'回復薬', col:'#3aa76d' },   // ライフ回復（緑）
-  { k:'bunshin',label:'分', name:'分身',   col:'#5aa9e6' },   // 僚機（水色）
-  { k:'pierce', label:'貫', name:'貫通弾', col:'#e67e22' }    // 貫通弾（橙）
+  { k:'bunshin',label:'分', name:'分身',   col:'#5aa9e6' }    // 僚機（水色）
 ];
 const MAX_LIVES = 5, MAX_WINGS = 2;
 const STAGE_NAMES = ['', '領収書の山', '請求書の束', '帳簿の海', '年末調整', '確定申告'];
@@ -93,7 +93,7 @@ const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍
 function newPlayer(){
   return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
            sub: 0, subT: 0, rapidT: 0, shield: false,
-           wings: 0, pierceT: 0, inkT: 0 };
+           wings: 0, inkT: 0 };
 }
 
 function makeWave(n){
@@ -113,6 +113,96 @@ function makeWave(n){
     }
   }
   dir = 1; stepTimer = 0;
+}
+
+/* ---------- 裏面（全100面・雑魚のみ・面ごとに難化） ---------- */
+// 全部が雑魚キャラだが、面が進むほど硬く・速く・弾も多彩に。
+// 一部の敵は隊列を離れて独立移動（フロート）する＝動きが多彩。
+function makeUraWave(n){
+  enemies = [];
+  const cols = 7, rows = Math.min(3 + Math.floor(n/6), 5);
+  const gapX = 42, gapY = 32, x0 = (W - (cols-1)*gapX)/2, y0 = 84;
+  const baseHp = 1 + Math.floor(n/16);               // 面が進むと基礎HP増
+  const floatRatio = Math.min(.45, n*0.02);          // 面が進むと独立移動の敵が増える
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const tough = (r === 0);
+      const hp = baseHp + (tough ? 1 + Math.min(2, Math.floor(n/8)) : 0);
+      const e = { x: x0 + c*gapX, y: y0 + r*gapY, w: 26, h: 20, alive: true,
+                  kind: (r + c) % 3, pt: 20 + n, f: 0, hp: hp, maxhp: hp, hurt: 0, float: false };
+      if(n >= 3 && Math.random() < floatRatio){        // 独立移動する敵
+        e.float = true; e.t = Math.floor(Math.random()*100);
+        e.amp = 26 + Math.random()*38;
+        e.cx = Math.max(16 + e.amp, Math.min(W - 16 - e.amp, e.x));
+        e.fx = 0.02 + Math.random()*0.03;
+        e.phase = Math.random()*6.28;
+        e.vy = 0.12 + n*0.006 + Math.random()*0.10;    // ゆっくり降下（面が進むと速い）
+      }
+      enemies.push(e);
+    }
+  }
+  dir = 1; stepTimer = 0;
+}
+function startUra(){
+  ura = true; uraStage = 1; allClear = false;
+  bossObj = null; missiles = []; ebullets = []; bullets = []; beam = null; charge = 0;
+  winT = 0; morphT = 0; introT = 0; overT = 0;
+  lives = Math.min(MAX_LIVES, lives + 1);   // 突入ボーナスで1UP
+  player.inv = 90;
+  makeUraWave(1); state = 'play';
+  setMsg('裏一面　修羅の申告', 100);
+  bgmSet('boss', true);
+}
+function uraAllClear(){
+  ura = false; allClear = true; score += 5000;
+  bgmStop(); state = 'win';
+}
+// 独立移動の敵（フロート）を更新
+function updateFloaters(live){
+  for(const e of live){
+    if(!e.float) continue;
+    e.t = (e.t || 0) + 1;
+    e.x = e.cx + Math.sin(e.t*e.fx + e.phase) * e.amp;
+    e.y += e.vy;
+    e.f = Math.floor(e.t/12) % 2;
+    if(e.y > H - 64){ gameOver(); return; }
+  }
+}
+// 敵の発射（裏面は面数で激化・多彩化：直下／狙い撃ち／扇状）
+function enemyFire(live){
+  let rate, bspd, aimCh;
+  if(ura){
+    rate  = Math.min(.10, .02 + uraStage*.004);
+    bspd  = Math.min(5.2, 2.6 + uraStage*.06);
+    aimCh = Math.min(.85, .2 + uraStage*.03);
+  } else {
+    rate = .012 + wave*.006; bspd = 2.6 + wave*.2; aimCh = 0;
+  }
+  if(Math.random() < rate){
+    const s = live[Math.floor(Math.random()*live.length)];
+    if(ura && Math.random() < aimCh){                 // 自機を狙う
+      const a = Math.atan2(player.y - s.y, player.x - s.x);
+      ebullets.push({ x: s.x, y: s.y + 12, vx: Math.cos(a)*bspd/EBULLET_SPEED, vy: Math.sin(a)*bspd/EBULLET_SPEED, kind:1 });
+    } else {
+      ebullets.push({ x: s.x, y: s.y + 12, vy: bspd/EBULLET_SPEED, kind: ura ? 1 : 0 });
+    }
+  }
+  if(ura && uraStage >= 12 && Math.random() < .006 + uraStage*.0006){   // 扇状の一斉射撃
+    const s = live[Math.floor(Math.random()*live.length)];
+    const a0 = Math.atan2(player.y - s.y, player.x - s.x), n = 3;
+    for(let i=0;i<n;i++){
+      const a = a0 + (i-(n-1)/2)*.3;
+      ebullets.push({ x: s.x, y: s.y + 10, vx: Math.cos(a)*bspd/EBULLET_SPEED, vy: Math.sin(a)*bspd/EBULLET_SPEED, kind:1 });
+    }
+    beep(200, .08, 'sawtooth', .04);
+  }
+}
+function inRect(p, r){ return p.x > r.x && p.x < r.x+r.w && p.y > r.y && p.y < r.y+r.h; }
+const YESBTN = { x: W/2-92, y: H/2+50, w: 82, h: 34 };
+const NOBTN  = { x: W/2+10, y: H/2+50, w: 82, h: 34 };
+function handleUraAsk(p){
+  if(inRect(p, YESBTN)) startUra();
+  else if(inRect(p, NOBTN)) state = 'win';
 }
 
 function makeBoss(type){
@@ -159,6 +249,7 @@ function bossDown(){
 
 function reset(){
   wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
+  ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = [];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -241,6 +332,11 @@ addEventListener('keydown', e=>{
   unlockAudio();
   keys[e.code] = true;
   if(['ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  if(state === 'uraAsk'){
+    if(e.code === 'KeyY') startUra();
+    else if(e.code === 'KeyN') state = 'win';
+    return;
+  }
   if(e.code === 'Space' || e.code === 'Enter') tap();
   if(e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyZ') kbCharge = true;
   if(e.code === 'KeyM') toggleMute();
@@ -266,6 +362,7 @@ cv.addEventListener('pointerdown', e=>{
   const p = pos(e);
   cv.setPointerCapture(e.pointerId);
   if(inMute(p)){ toggleMute(); return; }   // ミュート切替（開始前でも押せる）
+  if(state === 'uraAsk'){ handleUraAsk(p); return; }   // 裏面 突入 Yes/No
   if(state !== 'play'){ tap(); return; }
   if(inBtn(p) && chargePtr === null){ chargePtr = e.pointerId; return; }
   movePtr = e.pointerId; touchX = p.x; shoot();
@@ -289,16 +386,15 @@ function wingOffsets(){
 }
 function shoot(){
   if(player.cool > 0 || charge > 0 || state !== 'play') return;
-  const pierce = player.pierceT > 0;
   const ink = player.inkT > 0, dmg = ink ? 2 : 1;   // 朱肉で強化弾（威力2）
   const n = 1 + player.sub * 2;               // 副印で2WAY→3WAY→5WAY
   for(let i=0;i<n;i++){
     const off = (i - (n-1)/2);
-    bullets.push({ x: player.x + off*4, y: player.y - 12, w: 4, h: 10, vx: off*1.5, pierce, dmg, ink });
+    bullets.push({ x: player.x + off*4, y: player.y - 12, w: 4, h: 10, vx: off*1.5, dmg, ink });
   }
   // 分身（僚機）はまっすぐ1発ずつ援護射撃
   for(const wx of wingOffsets()){
-    bullets.push({ x: player.x + wx, y: player.y - 8, w: 4, h: 10, vx: 0, pierce, dmg, ink });
+    bullets.push({ x: player.x + wx, y: player.y - 8, w: 4, h: 10, vx: 0, dmg, ink });
   }
   player.cool = player.rapidT > 0 ? 7 : 14;     // 速筆で連射
   beep(880, .06, 'square', .04);
@@ -307,12 +403,11 @@ function shoot(){
 /* ---------- パワーアップ ---------- */
 function maybeDrop(x, y, rate){
   if(Math.random() > (rate === undefined ? .14 : rate)) return;
-  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身/貫通弾
+  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身
   // 回復薬は満タン時は出さない。分身は最大時は出さない。
   const w = [17, 15, 14, 12,
              lives < MAX_LIVES ? 9 : 0,
-             player.wings < MAX_WINGS ? 12 : 0,
-             10];
+             player.wings < MAX_WINGS ? 12 : 0];
   const total = w.reduce((a, b) => a + b, 0);
   let r = Math.random()*total, i = 0;
   while(r > w[i] && i < w.length-1){ r -= w[i]; i++; }
@@ -341,7 +436,6 @@ function pickUp(it){
     if(player.wings < MAX_WINGS){ player.wings++; setMsg('分身　僚機＋1', 28); }
     else { score += 150; setMsg('分身　最大（＋150）', 28); }
   }
-  else if(d.k === 'pierce'){ player.pierceT = 660; setMsg('貫通弾', 26); }
   beep(700, .08, 'triangle', .05); beep(1050, .1, 'triangle', .04);
 }
 
@@ -356,7 +450,6 @@ function updateItems(){
 
   if(player.subT > 0 && --player.subT === 0) player.sub = 0;
   if(player.rapidT > 0) player.rapidT--;
-  if(player.pierceT > 0) player.pierceT--;
   if(player.inkT > 0) player.inkT--;
 }
 
@@ -468,6 +561,12 @@ function update(){
 function updateSwarm(){
   const live = enemies.filter(e => e.alive);
   if(live.length === 0){
+    if(ura){                                   // 裏面：全100面。クリアで次面へ
+      if(uraStage >= 100){ uraAllClear(); return; }
+      uraStage++; makeUraWave(uraStage); player.inv = 60;
+      setMsg('裏' + uraStage + '面', 80);
+      return;
+    }
     // 進行：1面→2面→中ボス→3面→4面→5面→ラスボス
     if(wave === 2 && !midDone){
       makeBoss('mid'); setMsg('中ボス出現　決算の魔物', 120);
@@ -481,38 +580,38 @@ function updateSwarm(){
     setMsg('第' + kanji + '面　' + (STAGE_NAMES[wave] || ''), 90);
     return;
   }
-  // 移動（残数が減るほど速く）
-  const interval = Math.max(6, 30 - (enemies.length - live.length) * .5 - wave * 3);
-  stepTimer++;
-  if(stepTimer >= interval){
-    stepTimer = 0;
-    let hitEdge = false;
-    for(const e of live){
-      if(e.x + dir*8 > W-16 || e.x + dir*8 < 16) hitEdge = true;
-    }
-    if(hitEdge){
-      dir *= -1;
-      for(const e of live) e.y += 14;
-    } else {
-      for(const e of live){ e.x += dir*8; e.f ^= 1; }
-    }
-    beep(160 + live.length, .04, 'triangle', .02);
-    // 最前列到達
-    for(const e of live){
-      if(e.y > H - 70){ gameOver(); return; }
+
+  // 裏面：独立移動する敵（フロート）を更新
+  if(ura) updateFloaters(live);
+
+  // 隊列移動（マーチ）。裏面は隊列を組む敵のみが対象で、面が進むほど速い
+  const marchers = ura ? live.filter(e => !e.float) : live;
+  if(marchers.length){
+    const spd = ura ? (8 + Math.min(6, uraStage*0.12)) : 8;
+    const interval = ura
+      ? Math.max(4, 24 - uraStage*0.6 - (enemies.length - live.length) * .3)
+      : Math.max(6, 30 - (enemies.length - live.length) * .5 - wave * 3);
+    stepTimer++;
+    if(stepTimer >= interval){
+      stepTimer = 0;
+      let hitEdge = false;
+      for(const e of marchers){ if(e.x + dir*spd > W-16 || e.x + dir*spd < 16) hitEdge = true; }
+      if(hitEdge){ dir *= -1; for(const e of marchers) e.y += ura ? 12 : 14; }
+      else { for(const e of marchers){ e.x += dir*spd; e.f ^= 1; } }
+      beep(160 + live.length, .04, 'triangle', .02);
+      for(const e of marchers){ if(e.y > H - 70){ gameOver(); return; } }
     }
   }
-  // 敵の発射
-  if(Math.random() < .012 + wave*.006){
-    const s = live[Math.floor(Math.random()*live.length)];
-    ebullets.push({ x: s.x, y: s.y + 12, vy: 2.6 + wave*.2, kind:0 });
-  }
+
+  // 敵の発射（裏面は面数で激化・多彩化）
+  enemyFire(live);
+
   for(const e of live){ if(e.hurt > 0) e.hurt--; }
   // 命中判定
   for(const b of bullets){
     for(const e of live){
       if(e.alive && Math.abs(b.x - e.x) < e.w/2 + 2 && Math.abs(b.y - e.y) < e.h/2 + 4){
-        if(!b.pierce) b.dead = true;
+        b.dead = true;
         e.hp -= (b.dmg || 1);
         if(e.hp <= 0){                              // 撃破
           e.alive = false; score += e.pt;
@@ -768,7 +867,7 @@ function updateWinSeq(){
     beep(70, .9, 'sine', .09); beep(150, .8, 'triangle', .06);
     beep(300, .7, 'sine', .05); beep(1000, .4, 'square', .03);
   }
-  if(winT <= 0){ state = 'win'; }
+  if(winT <= 0){ state = 'uraAsk'; }   // 所長撃破後：裏面に突入するか Yes/No
 }
 function drawWinSeq(){
   const t = winMax - winT;
@@ -1206,7 +1305,6 @@ function drawChips(){
   if(player.inkT > 0)    on.push({ d: ITEMS[2], t: player.inkT/600 });
   if(player.shield)      on.push({ d: ITEMS[3], t: 1 });
   if(player.wings > 0)   on.push({ d: ITEMS[5], t: 1, tag: player.wings + '機' });
-  if(player.pierceT > 0) on.push({ d: ITEMS[6], t: player.pierceT/660 });
   on.forEach((o, i)=>{
     const x = 8 + i*40, y = H-52;
     ctx.fillStyle = 'rgba(14,23,48,.6)'; ctx.fillRect(x, y, 36, 14);
@@ -1235,7 +1333,8 @@ function drawHUD(){
   ctx.font = '11px system-ui,sans-serif';
   ctx.textAlign = 'left';  ctx.fillText('SCORE ' + score, 8, H-12);
   ctx.textAlign = 'right';
-  ctx.fillText(bossObj ? (bossObj.type === 'mid' ? 'MID BOSS' : 'FINAL') : 'STAGE ' + wave + '/5', W-8, H-12);
+  ctx.fillText(bossObj ? (bossObj.type === 'mid' ? 'MID BOSS' : 'FINAL')
+    : (ura ? '裏 ' + uraStage + '/100' : 'STAGE ' + wave + '/5'), W-8, H-12);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#c0392b';
   let s = ''; for(let i=0;i<lives;i++) s += '● ';
@@ -1262,6 +1361,13 @@ function drawMute(){
   }
 }
 
+function drawChoiceBtn(r, label, col){
+  ctx.fillStyle = 'rgba(14,23,48,.92)'; ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+  ctx.fillStyle = '#ede4d3'; ctx.font = '13px "Yu Mincho",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, r.x + r.w/2, r.y + r.h/2);
+}
 function center(lines){
   ctx.fillStyle = 'rgba(14,23,48,.82)';
   ctx.fillRect(0, H/2-100, W, 200);
@@ -1334,23 +1440,42 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v23', s:24, gap:30},
+      {t:'書類インベーダー　v24', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
-      {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬', s:10, c:'rgba(237,228,211,.7)', gap:18},
-      {t:'分身で僚機・貫通弾も', s:10, c:'#5aa9e6', gap:22},
-      {t:'全5面。2面クリアで中ボス、最後にラスボス', s:11, c:'#d8b45c', gap:32},
+      {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
+      {t:'全5面。2面で中ボス→ラスボス所長', s:11, c:'#d8b45c', gap:18},
+      {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:32},
       {t:'タップ / スペースで開始', s:12, f:'system-ui,sans-serif', c:'#ede4d3'}
     ]);
     drawSeal(W/2, 128, 40);
   } else if(state === 'over'){
+    const L = [];
+    if(uraStage > 0){                              // 裏面での力尽き＝到達面を表示
+      L.push({t:'力尽きた…', s:20, gap:28});
+      L.push({t:'裏' + uraStage + '面まで到達', s:17, c:'#c0392b', gap:30});
+    } else {
+      L.push({t:'申告漏れ…書類に埋もれた', s:19, gap:32});
+    }
+    L.push({t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32});
+    L.push({t:'タップでもう一度', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'});
+    center(L);
+  } else if(state === 'uraAsk'){
     center([
-      {t:'申告漏れ…書類に埋もれた', s:19, gap:32},
-      {t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32},
-      {t:'タップでもう一度', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
+      {t:'所長 撃破！', s:24, c:'#d8b45c', gap:28},
+      {t:'しっかり納税、おつかれさま。', s:12, gap:24},
+      {t:'…だが、申告に終わりはない。', s:12, c:'#c0392b', gap:26},
+      {t:'裏面（全100面）に突入しますか？', s:13, gap:18}
     ]);
+    drawChoiceBtn(YESBTN, 'YES 突入', '#c0392b');
+    drawChoiceBtn(NOBTN,  'NO 終了',  '#5aa9e6');
   } else if(state === 'win'){
-    center([
+    center(allClear ? [
+      {t:'全100面 制覇！', s:23, c:'#d8b45c', gap:30},
+      {t:'あなたは伝説の税理士だ', s:13, gap:30},
+      {t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32},
+      {t:'タップで再挑戦', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
+    ] : [
       {t:'所長 撃破', s:24, c:'#d8b45c', gap:30},
       {t:'期限内に申告完了しました', s:13, gap:30},
       {t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32},
@@ -1360,7 +1485,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v23', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v24', 5, 9);
   ctx.restore();
 }
 
