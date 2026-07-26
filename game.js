@@ -151,21 +151,24 @@ function makeUraWave(n){
   const cols = 7, rows = Math.min(3 + Math.floor(n/6), 5);
   const gapX = 42, gapY = 32, x0 = (W - (cols-1)*gapX)/2, y0 = 84;
   const baseHp = 1 + Math.floor(n/16);               // 面が進むと基礎HP増
-  const floatRatio = Math.min(.45, n*0.02);          // 面が進むと独立移動の敵が増える
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
       const tough = (r === 0);
-      const hp = baseHp + (tough ? 1 + Math.min(2, Math.floor(n/8)) : 0);
+      const sprite = (r*2 + c) % 4;
+      let hp = baseHp + (tough ? 1 + Math.min(2, Math.floor(n/8)) : 0);
       const e = { x: x0 + c*gapX, y: y0 + r*gapY, w: 26, h: 20, alive: true,
-                  kind: (r + c) % 3, sprite: (r*2 + c) % 4, pt: 20 + n, f: 0,
+                  kind: (r + c) % 3, sprite: sprite, pt: 20 + n, f: 0,
                   hp: hp, maxhp: hp, hurt: 0, float: false };
-      if(n >= 3 && Math.random() < floatRatio){        // 独立移動する敵
+      // sprite別の特性
+      if(sprite === 1){ e.hp += 1; e.maxhp += 1; }     // 黒クリップボード＝装甲（硬い）
+      if(sprite === 3){ e.pt += 15; }                  // 帳簿＝高得点
+      if(sprite === 0){                                // カバン＝機動（常にフロートで大きく蛇行）
         e.float = true; e.t = Math.floor(Math.random()*100);
-        e.amp = 26 + Math.random()*38;
+        e.amp = 34 + Math.random()*40;
         e.cx = Math.max(16 + e.amp, Math.min(W - 16 - e.amp, e.x));
-        e.fx = 0.02 + Math.random()*0.03;
+        e.fx = 0.025 + Math.random()*0.03;
         e.phase = Math.random()*6.28;
-        e.vy = 0.12 + n*0.006 + Math.random()*0.10;    // ゆっくり降下（面が進むと速い）
+        e.vy = 0.14 + n*0.007 + Math.random()*0.10;    // ゆっくり降下（面が進むと速い）
       }
       enemies.push(e);
     }
@@ -227,6 +230,15 @@ function enemyFire(live){
       ebullets.push({ x: s.x, y: s.y + 10, vx: Math.cos(a)*bspd/EBULLET_SPEED, vy: Math.sin(a)*bspd/EBULLET_SPEED, kind:1 });
     }
     beep(200, .08, 'sawtooth', .04);
+  }
+  // メガネ星バッジ＝射撃特化：自機を狙って追加で撃つ
+  if(ura){
+    const snipers = live.filter(e => e.sprite === 2);
+    if(snipers.length && Math.random() < .02 + uraStage*.0022){
+      const s = snipers[Math.floor(Math.random()*snipers.length)];
+      const a = Math.atan2(player.y - s.y, player.x - s.x);
+      ebullets.push({ x: s.x, y: s.y + 10, vx: Math.cos(a)*bspd/EBULLET_SPEED, vy: Math.sin(a)*bspd/EBULLET_SPEED, kind: 1 });
+    }
   }
 }
 /* ---------- 防壁（積み上げた書類の壁）：ステージによって出現 ---------- */
@@ -833,7 +845,8 @@ function updateSwarm(){
         e.hp -= (b.dmg || 1);
         if(e.hp <= 0){                              // 撃破
           e.alive = false; award(e.pt, e.x, e.y);
-          ki = Math.min(100, ki + 6); maybeDrop(e.x, e.y);
+          ki = Math.min(100, ki + 6);
+          maybeDrop(e.x, e.y, e.sprite === 3 ? 0.42 : undefined);   // 帳簿＝アイテムを落としやすい
           beep(520, .07, 'square', .04);
         } else {                                    // 固い敵：ヒットしたが未撃破
           e.hurt = 4; score += 2; ki = Math.min(100, ki + 1);
@@ -1396,6 +1409,14 @@ function drawZako(e){
   if(e.maxhp > 1){   // 残り耐久ピップ
     for(let i=0;i<e.hp;i++){ ctx.fillStyle = '#c0392b'; ctx.fillRect(e.x - 11 + i*4, e.y - 16, 2.5, 2.5); }
   }
+  if(idx === 2){     // 射撃特化＝赤い照準ドット
+    ctx.fillStyle = 'rgba(255,82,82,' + (.5 + .4*Math.sin(frame/6)) + ')';
+    ctx.beginPath(); ctx.arc(e.x, e.y - 15, 2, 0, Math.PI*2); ctx.fill();
+  } else if(idx === 3){   // 高得点＝¥のきらめき
+    ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 8px serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('¥', e.x + 11, e.y - 12);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
 }
 // 自機＝電卓
 function drawSealShip(x, y, scale, alpha){
@@ -1862,7 +1883,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v36', s:24, gap:30},
+      {t:'書類インベーダー　v37', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1919,7 +1940,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v36", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v37", 5, 9);
   ctx.restore();
 }
 
