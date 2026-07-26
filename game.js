@@ -404,30 +404,45 @@ function drawCutin(){
 }
 
 /* ---------- ボス大技（役職別） ---------- */
-function updateRankUlt(b){
-  if(b.ult){
-    b.ult.t--;
-    if(b.ult.state === 'warn'){ if(b.ult.t <= 0){ b.ult.state = 'fire'; b.ult.t = 32; shake = 10; beep(90, .5, 'sawtooth', .07); } }
-    else {   // fire：差押えビームのライン上に自機がいれば被弾
-      if(player.inv <= 0 && Math.abs(player.x - b.ult.x) < 16 && player.y > b.y){
-        if(player.shield > 0){ player.shield--; player.inv = 60; shake = 8; setMsg('受理印が受け止めた', 26); beep(300, .18, 'triangle', .05); }
-        else { lives--; player.inv = 90; shake = 16; beep(120, .3, 'sawtooth', .07); if(lives <= 0) gameOver(); }
-      }
-      if(b.ult.t <= 0) b.ult = null;
+function updateRankUlt(b){   // 差押えビームの状態機械（発射は rankAttack が startBeam で開始）
+  if(!b.ult) return;
+  b.ult.t--;
+  if(b.ult.state === 'warn'){ if(b.ult.t <= 0){ b.ult.state = 'fire'; b.ult.t = 32; shake = 10; beep(90, .5, 'sawtooth', .07); } }
+  else {
+    if(player.inv <= 0 && Math.abs(player.x - b.ult.x) < 16 && player.y > b.y){
+      if(player.shield > 0){ player.shield--; player.inv = 60; shake = 8; setMsg('受理印が受け止めた', 26); beep(300, .18, 'triangle', .05); }
+      else { lives--; player.inv = 90; shake = 16; beep(120, .3, 'sawtooth', .07); if(lives <= 0) gameOver(); }
     }
-    return;
+    if(b.ult.t <= 0) b.ult = null;
   }
-  b.ultCool--;
-  if(b.ultCool <= 0){
-    b.ultCool = Math.max(200, 320 - uraStage - b.rank*10);
-    if(b.rank < 5){   // 一斉調査＝全方位リング弾
-      const n = 10 + b.rank*2;
-      for(let i=0;i<n;i++){ const a = i/n*6.283; ebullets.push({ x: b.x, y: b.y, vx: Math.cos(a)*2.2/EBULLET_SPEED, vy: Math.sin(a)*2.2/EBULLET_SPEED, kind: 1 }); }
-      setMsg(RANK_NAME[b.rank] + 'の一斉調査！', 40); beep(200, .14, 'sawtooth', .05);
-    } else {          // 差押えビーム（自機を狙う→警告→発射）
-      b.ult = { state: 'warn', t: 44, x: player.x }; setMsg('差押えビーム 警告！', 40); beep(320, .4, 'sine', .05);
-    }
+}
+function startBeam(b){ if(b.ult) return; b.ult = { state: 'warn', t: 44, x: player.x }; setMsg('差押えビーム 警告！', 34); beep(320, .4, 'sine', .05); }
+// 役職ごとに個性化した攻撃（体力半分で phase2 に変化）
+function rankAttack(b){
+  b.cool--;
+  if(b.cool > 0) return;
+  const p2 = b.phase2, sy = b.y + b.h/2 - 8, aimA = Math.atan2(player.y - sy, player.x - b.x);
+  const shoot = (a, spd, kind) => ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*spd/EBULLET_SPEED, vy: Math.sin(a)*spd/EBULLET_SPEED, kind: kind || 1 });
+  const fan  = (n, spread, spd, kind) => { for(let i=0;i<n;i++) shoot(aimA + (i-(n-1)/2)*spread, spd, kind); };
+  const ring = (n, spd, off, kind) => { for(let i=0;i<n;i++) shoot((off||0) + i/n*6.283, spd, kind); };
+  const seals = (n, spread, spd) => fan(n, spread, spd, 3);
+  const missile = (n) => { for(let i=0;i<n;i++){ const a = aimA + (i-(n-1)/2)*.3; spawnMissile(b.x, sy, i%2 ? 'zigzag' : 'homing', a, true); } };
+  switch(b.rank){
+    case 0:  b.cool = p2?30:46; fan(p2?5:3, .22, 2.4); break;                                   // 国税調査官：狙い撃ち
+    case 1:  b.cool = p2?50:64; ring(p2?12:8, 2.1, b.t*0.02); if(p2) fan(3, .24, 2.6); break;    // 上席：全方位
+    case 2:  b.cool = p2?52:70; seals(p2?5:3, .2, 2.7); if(p2) fan(3, .3, 2.2); break;           // 統括：追徴スタンプ
+    case 3:  b.cool = p2?66:90; missile(p2?2:1); fan(p2?3:2, .26, 2.4); break;                   // 特別：誘導ミサイル
+    case 4:  b.cool = p2?44:62; ring(p2?12:10, 2.2, b.t*0.05); if(p2) ring(12, 2.2, b.t*0.05 + 0.26); break;  // 副署長：回転リング
+    case 5:  b.cool = p2?40:58; fan(3, .26, 2.4); if(!b.ult && Math.random() < (p2?.5:.28)) startBeam(b); if(p2) seals(3, .2, 2.6); break;   // 税務署長：差押えビーム
+    case 6:  b.cool = p2?14:24; shoot(aimA + (Math.random()-.5)*.18, p2?3.4:3.0); if(p2 && b.t%8===0) fan(5, .3, 2.6); break;   // 査察官(マルサ)：速射
+    case 7:  b.cool = p2?56:74; fan(p2?9:7, .17, 2.3); if(p2){ shoot(Math.PI/2, 2.4); ring(6, 2.0, 0); } break;   // 国税局長：弾幕の壁
+    case 8:  b.cool = p2?44:62; if(b.t % 2) seals(3, .2, 2.6); else missile(p2?2:1); if(p2) ring(10, 2.1, b.t*0.03); break;   // 次長：複合
+    case 9:  b.cool = p2?36:52;   // 国税庁長官：全部盛り
+             if(p2){ ring(16, 2.3, b.t*0.04); seals(3, .18, 2.8); if(!b.ult && Math.random() < .3) startBeam(b); }
+             else  { (b.t % 2) ? ring(10, 2.1, b.t*0.03) : fan(5, .22, 2.5); }
+             break;
   }
+  beep(180 + b.rank*8, .08, 'sawtooth', .04);
 }
 function drawRankUlt(b){
   if(!b.ult) return;
@@ -1152,52 +1167,37 @@ function updateMidBoss(b){
   b.y = (b.y0 || 96) + Math.sin(b.t/80) * 14;
   if(b.hurt > 0) b.hurt--;
 
-  b.cool--;
-  if(b.cool <= 0){
-    const rage = b.hp < b.max/2;
-    b.cool = rage ? 40 : 62;
-    const n = rage ? 4 : 3;
-    for(let i=0;i<n;i++){
-      const a = Math.PI/2 + (i-(n-1)/2) * .3;
-      ebullets.push({ x: b.x, y: b.y + b.h/2 - 4, vx: Math.cos(a)*2.4, vy: Math.sin(a)*2.4, kind:1 });
+  if(b.type === 'rank'){
+    if(!b.phase2 && b.hp <= b.max/2){          // 体力半分で攻撃パターン変化
+      b.phase2 = true; shake = 14; flash = 8; b.cool = 16; b.ult = null;
+      setMsg(RANK_NAME[b.rank] + '　本気！', 60); beep(180, .4, 'sawtooth', .06); beep(90, .5, 'square', .05);
     }
-    beep(200, .1, 'sawtooth', .05);
-  }
-  // たまに誘導ミサイル
-  b.mslCool--;
-  if(b.mslCool <= 0){
-    b.mslCool = 150;
-    const aim = Math.atan2(player.y - b.y, player.x - b.x);
-    spawnMissile(b.x, b.y + b.h/2 - 4, 'homing', aim, false);
-    beep(520, .12, 'square', .04);
-  }
-  if(b.type === 'rank') updateRankUlt(b);   // ボス大技（一斉調査／差押えビーム）
-  // ボス固有武器
-  if(b.type === 'kousai' || b.type === 'chosa' || b.type === 'kokuzei' || b.type === 'rank'){
-    b.spCool--;
-    if(b.spCool <= 0){
-      const rage = b.hp < b.max/2;
-      const sy = b.y + b.h/2 - 10, aim = Math.atan2(player.y - sy, player.x - b.x);
-      if(b.type === 'kousai'){
-        // 接待攻撃：❤️🍶🍺 を扇状にばらまく
-        b.spCool = rage ? 80 : 120;
-        const emo = ['❤️','🍶','🍺'], n = rage ? 6 : 5, sp = 2.0;
-        for(let i=0;i<n;i++){
-          const a = aim + (i-(n-1)/2)*.24;
-          ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, kind: 2, emoji: emo[i%emo.length] });
+    rankAttack(b);       // 役職別の攻撃
+    updateRankUlt(b);    // 差押えビーム進行
+  } else {
+    // 中ボス／女将／調査官／局長：扇状弾＋誘導ミサイル＋固有武器
+    b.cool--;
+    if(b.cool <= 0){
+      const rage = b.hp < b.max/2; b.cool = rage ? 40 : 62; const n = rage ? 4 : 3;
+      for(let i=0;i<n;i++){ const a = Math.PI/2 + (i-(n-1)/2)*.3; ebullets.push({ x: b.x, y: b.y + b.h/2 - 4, vx: Math.cos(a)*2.4, vy: Math.sin(a)*2.4, kind: 1 }); }
+      beep(200, .1, 'sawtooth', .05);
+    }
+    b.mslCool--;
+    if(b.mslCool <= 0){ b.mslCool = 150; const aim = Math.atan2(player.y - b.y, player.x - b.x); spawnMissile(b.x, b.y + b.h/2 - 4, 'homing', aim, false); beep(520, .12, 'square', .04); }
+    if(b.type === 'kousai' || b.type === 'chosa' || b.type === 'kokuzei'){
+      b.spCool--;
+      if(b.spCool <= 0){
+        const rage = b.hp < b.max/2, sy = b.y + b.h/2 - 10, aim = Math.atan2(player.y - sy, player.x - b.x);
+        if(b.type === 'kousai'){
+          b.spCool = rage ? 80 : 120; const emo = ['❤️','🍶','🍺'], n = rage ? 6 : 5, sp = 2.0;
+          for(let i=0;i<n;i++){ const a = aim + (i-(n-1)/2)*.24; ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, kind: 2, emoji: emo[i%emo.length] }); }
+          beep(880, .1, 'sine', .05); beep(1180, .08, 'sine', .04);
+        } else {
+          const rk = b.type === 'kokuzei' ? 5 : 2, big = rk >= 4;
+          b.spCool = big ? (rage ? 58 : 88) : (rage ? 95 : 140); const n = Math.min(7, 2 + rk + (rage ? 1 : 0)), sp = 2.6 + rk*0.08;
+          for(let i=0;i<n;i++){ const a = aim + (i-(n-1)/2)*.20; ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, kind: 3 }); }
+          beep(150, .16, 'square', .06);
         }
-        beep(880, .1, 'sine', .05); beep(1180, .08, 'sine', .04);
-      } else {
-        // 追徴スタンプ：認印「追」を投げつける（役職が上がるほど多く速い）
-        const rk = b.type === 'rank' ? b.rank : (b.type === 'kokuzei' ? 5 : 2);
-        const big = rk >= 4;
-        b.spCool = big ? (rage ? 58 : 88) : (rage ? 95 : 140);
-        const n = Math.min(7, 2 + Math.floor(rk) + (rage ? 1 : 0)), sp = 2.6 + rk*0.08;
-        for(let i=0;i<n;i++){
-          const a = aim + (i-(n-1)/2)*.20;
-          ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, kind: 3 });
-        }
-        beep(150, .16, 'square', .06);
       }
     }
   }
@@ -1762,6 +1762,10 @@ function drawRankBoss(b){
     ctx.strokeStyle = 'rgba(216,180,92,' + (.5 + .3*Math.sin(frame/8)) + ')'; ctx.lineWidth = 3;
     ctx.strokeRect(x-2, y-2, b.w+4, b.h+4);
   }
+  if(b.phase2){   // 体力半分＝本気モード（朱のオーラ）
+    ctx.strokeStyle = 'rgba(255,60,60,' + (.4 + .4*Math.sin(frame/5)) + ')'; ctx.lineWidth = 2;
+    ctx.strokeRect(x-5, y-5, b.w+10, b.h+10);
+  }
   if(ready){
     if(b.hurt > 0) ctx.globalAlpha = .55;
     ctx.drawImage(img, x, y, b.w, b.h);
@@ -2186,7 +2190,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v46', s:24, gap:30},
+      {t:'書類インベーダー　v47', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2246,7 +2250,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v46", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v47", 5, 9);
   ctx.restore();
 }
 
