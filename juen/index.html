@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="description" content="レバーを引いて10円玉を転がし、東京→工場へ。税理士法人アストラストのミニゲーム。">
+<meta name="description" content="レバーを引いてパワーをため、10円玉を転がし東京→工場へ。税理士法人アストラストのミニゲーム。">
 <meta name="theme-color" content="#f2c020">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f2c020'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%23caa63a' stroke='%238a6a1f' stroke-width='4'/%3E%3Ctext x='32' y='41' font-size='20' font-family='sans-serif' fill='%237a5c18' text-anchor='middle'%3E10%3C/text%3E%3C/svg%3E">
@@ -23,10 +23,10 @@
 </head>
 <body>
 <div id="wrap"><canvas id="cv"></canvas></div>
-<div class="hint">画面を長押し＝レバーを引いて10円を転がす／離すと止まる<br><a href="https://shorui-invader.web.app/">← 書類インベーダーへ</a></div>
+<div class="hint">長押しで“引く”＝パワーがたまる → 離して発射／緑の帯で離すと成功<br><a href="https://shorui-invader.web.app/">← 書類インベーダーへ</a></div>
 
 <script>
-const W = 380, H = 620;
+const W = 380, H = 640;
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 let scale = 1;
@@ -41,33 +41,30 @@ window.addEventListener('resize', resize);
 
 /* ---------- 駅・ランドマーク ---------- */
 const STATIONS = [
-  { n:'東京駅',       e:'🚉' },
-  { n:'スカイツリー', e:'🗼' },
-  { n:'富士山',       e:'🗻' },
-  { n:'お城',         e:'🏯' },
-  { n:'神社',         e:'⛩️' },
-  { n:'東京タワー',   e:'🗼' },
-  { n:'灯台',         e:'💡' },
-  { n:'工場',         e:'🏭' }
+  { n:'東京駅', e:'🚉' }, { n:'スカイツリー', e:'🗼' }, { n:'富士山', e:'🗻' },
+  { n:'お城', e:'🏯' }, { n:'神社', e:'⛩️' }, { n:'東京タワー', e:'🗼' },
+  { n:'灯台', e:'💡' }, { n:'工場', e:'🏭' }
 ];
-const RAMPS = STATIONS.length - 1;   // 7区間
-const M = 34, TOP = 100, BOT = 552;
-const GAP = (BOT - TOP) / RAMPS, TILT = 10;
+const RAMPS = STATIONS.length - 1;   // 7
+const M = 34, TOP = 96, BOT = 520;
+const GAP = (BOT - TOP) / RAMPS, TILT = 9;
 function rampGeom(i){
   const y = TOP + i * GAP, leftFirst = (i % 2 === 0);
   const xEntry = leftFirst ? M : W - M, xExit = leftFirst ? W - M : M;
   return { y, xEntry, xExit, yEntry: y, yExit: y + TILT };
 }
-/* ---------- 物理 ---------- */
-const ACCEL = 0.00042, FRIC = 0.930, CROSS = 0.0040, STOP = 0.0006;
+/* ---------- 物理（発射モデル） ---------- */
+const VMAX = 0.150, FRIC = 0.90, STOP = 0.0006, CROSS = 0.004, FILL = 1.1;
+const DISTK = 9.93;                     // 着地u ≒ v0 * DISTK
 const HOLE = { u0: 0.30, u1: 0.42 };
 function dzStart(i){ return 1.0 - Math.max(0.09, 0.20 - i * 0.018); }
+function powerForU(u){ return Math.min(100, u / (VMAX * DISTK) * 100); } // 参考：着地uに必要な%
 
 /* ---------- 状態 ---------- */
-let state = 'title', coin, score = 0, coins = 3, best = 0, holding = false,
-    endT = 0, shake = 0, sparkle = [], leverA = 0;
+let state = 'title', coin, score = 0, coins = 3, best = 0,
+    charging = false, power = 0, leverA = 0, endT = 0, shake = 0, sparkle = [];
 try{ best = +localStorage.getItem('juen_best') || 0; }catch(e){}
-function newCoin(){ coin = { i:0, u:0, v:0, spin:0, drop:0 }; state = 'play'; holding = false; }
+function newCoin(){ coin = { i:0, u:0, v:0, spin:0, drop:0 }; state='play'; charging=false; power=0; }
 function startGame(){ score = 0; coins = 3; sparkle = []; newCoin(); }
 
 /* ---------- 音 ---------- */
@@ -81,19 +78,25 @@ function beep(freq, dur, type='square', vol=.05){
   }catch(e){}
 }
 
-/* ---------- 入力（長押し＝レバーを引く） ---------- */
+/* ---------- 入力 ---------- */
 function press(){
   if(ac && ac.state==='suspended') ac.resume();
   if(state==='title' || state==='over'){ startGame(); return; }
   if(state==='out' || state==='win'){ newCoin(); return; }
-  if(state==='play') holding = true;
+  if(state==='play' && coin.v < STOP){ charging = true; }   // コイン停止中だけ引ける
 }
-function release(){ holding = false; }
+function releaseFire(){
+  if(state==='play' && charging){
+    if(power > 3){ coin.v = power/100 * VMAX; beep(520,.08,'square',.05); beep(300,.1,'sawtooth',.04); }
+    power = 0;
+  }
+  charging = false;
+}
 cv.addEventListener('pointerdown', e=>{ e.preventDefault(); press(); });
-cv.addEventListener('pointerup',   e=>{ e.preventDefault(); release(); });
-cv.addEventListener('pointercancel', release);
+cv.addEventListener('pointerup',   e=>{ e.preventDefault(); releaseFire(); });
+cv.addEventListener('pointercancel', releaseFire);
 addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='Enter'){ e.preventDefault(); if(!e.repeat) press(); } });
-addEventListener('keyup',   e=>{ if(e.code==='Space'||e.code==='Enter'){ release(); } });
+addEventListener('keyup',   e=>{ if(e.code==='Space'||e.code==='Enter'){ releaseFire(); } });
 
 /* ---------- 更新 ---------- */
 function coinXY(){
@@ -101,33 +104,35 @@ function coinXY(){
   return { x: g.xEntry+(g.xExit-g.xEntry)*coin.u, y: (g.yEntry+(g.yExit-g.yEntry)*coin.u)-11-(coin.drop||0), g };
 }
 function fail(){
-  coins--; shake = 14; beep(150,.5,'sawtooth',.06); beep(90,.6,'square',.05); endT = 0; holding = false;
+  coins--; shake = 14; beep(150,.5,'sawtooth',.06); beep(90,.6,'square',.05); endT = 0; charging=false; power=0;
   if(coins <= 0){ state = 'over'; if(score>best){ best=score; try{localStorage.setItem('juen_best',best);}catch(e){} } }
   else state = 'out';
 }
 function advance(){
   const p = coinXY();
-  for(let k=0;k<7;k++) sparkle.push({x:p.x, y:p.y, vx:(Math.random()-.5)*3, vy:-Math.random()*3-1, life:24});
+  for(let k=0;k<8;k++) sparkle.push({x:p.x, y:p.y, vx:(Math.random()-.5)*3, vy:-Math.random()*3-1, life:26});
   coin.i++; score += 100 + coin.i*20; beep(660,.06,'square',.05); beep(990,.08,'triangle',.04);
   if(coin.i >= RAMPS){ state='win'; endT=0; shake=12; score+=300;
     if(score>best){ best=score; try{localStorage.setItem('juen_best',best);}catch(e){} }
     beep(784,.5,'triangle',.06); beep(1046,.6,'triangle',.05);
-  } else { coin.u = 0; coin.v = 0; coin.drop = 10; }
+  } else { coin.u=0; coin.v=0; coin.drop=10; }
 }
 function update(){
   if(shake>0) shake--;
-  leverA += (((holding && state==='play') ? 1 : 0) - leverA) * 0.3;
+  const targetLever = charging ? (power/100) : 0;
+  leverA += (targetLever - leverA) * 0.35;
   for(const s of sparkle){ s.x+=s.vx; s.y+=s.vy; s.vy+=.18; s.life--; }
   sparkle = sparkle.filter(s=>s.life>0);
   if(state==='out'||state==='win'||state==='over') endT++;
   if(state!=='play') return;
   if(coin.drop>0) coin.drop--;
-  if(holding) coin.v += ACCEL;
-  coin.v *= FRIC; if(coin.v < 0.00001) coin.v = 0;
-  coin.u += coin.v; coin.spin += coin.v*30;
-  if(coin.u > HOLE.u0 && coin.u < HOLE.u1 && coin.v < CROSS){ fail(); return; }  // 穴に落ちる
-  if(coin.u >= 1.0){ fail(); return; }                                          // 行き過ぎて落下
-  if(!holding && coin.v < STOP && coin.u >= dzStart(coin.i)) advance();          // 緑ゾーンで停止→次段
+  if(charging) power = Math.min(100, power + FILL);        // 引く＝チャージ（コインは止まったまま）
+  if(coin.v > 0){                                          // 発射後：転がって減速
+    coin.u += coin.v; coin.v *= FRIC; coin.spin += coin.v*30;
+    if(coin.u > HOLE.u0 && coin.u < HOLE.u1 && coin.v < CROSS){ fail(); return; }
+    if(coin.u >= 1.0){ fail(); return; }
+    if(coin.v < STOP){ coin.v = 0; if(coin.u >= dzStart(coin.i)) advance(); }  // 停止：緑ゾーンなら前進
+  }
 }
 
 /* ---------- 描画 ---------- */
@@ -147,17 +152,31 @@ function lcd(x,y,w,label,val){ ctx.fillStyle='#3a2e10'; rr(x,y,w,34,5); ctx.fill
   ctx.fillStyle='#e8d9a8'; ctx.font='bold 9px "Yu Gothic",system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(label,x+w/2,y+2);
   ctx.fillStyle='#ff5a3a'; ctx.font='bold 15px "Courier New",monospace'; ctx.textBaseline='middle'; ctx.fillText(val,x+w/2,y+22); }
 function ptOnRamp(g,u){ return { x:g.xEntry+(g.xExit-g.xEntry)*u, y:g.yEntry+(g.yExit-g.yEntry)*u }; }
-
 function drawLever(){
-  const bx = W-40, by = H-42;
+  const bx = W-34, by = H-52;
   ctx.save(); ctx.translate(bx,by);
-  ctx.fillStyle='#7a5c18'; ctx.beginPath(); ctx.arc(0,0,13,0,6.283); ctx.fill();
-  ctx.rotate(-0.9 + leverA*1.5);
+  ctx.fillStyle='#7a5c18'; ctx.beginPath(); ctx.arc(0,0,12,0,6.283); ctx.fill();
+  ctx.rotate(-1.0 + leverA*1.7);
   ctx.strokeStyle='#c0392b'; ctx.lineWidth=7; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-30); ctx.stroke();
-  ctx.fillStyle='#e04030'; ctx.beginPath(); ctx.arc(0,-32,7,0,6.283); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-28); ctx.stroke();
+  ctx.fillStyle='#e04030'; ctx.beginPath(); ctx.arc(0,-30,7,0,6.283); ctx.fill();
   ctx.restore();
-  ctx.fillStyle='#5a4410'; ctx.font='bold 9px system-ui'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText('レバー', bx, by+16);
+  ctx.fillStyle='#5a4410'; ctx.font='bold 9px system-ui'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText('レバー', bx, by+14);
+}
+function drawPowerMeter(){
+  const x=20, y=H-52, w=W-90, h=18;
+  ctx.fillStyle='#3a2e10'; rr(x-3,y-3,w+6,h+6,6); ctx.fill();
+  ctx.fillStyle='#1c1c1c'; rr(x,y,w,h,4); ctx.fill();
+  // 狙いの緑帯（この段でゴールに入る%）
+  const lo = powerForU(dzStart(coin ? coin.i : 0)), hi = powerForU(0.995);
+  ctx.fillStyle='rgba(29,185,84,.85)'; ctx.fillRect(x + w*lo/100, y, w*(hi-lo)/100, h);
+  // 現在パワー
+  const p = power/100;
+  const grd = ctx.createLinearGradient(x,0,x+w,0);
+  grd.addColorStop(0,'#7ae0a0'); grd.addColorStop(.6,'#f2c020'); grd.addColorStop(1,'#ff5a3a');
+  ctx.fillStyle=grd; ctx.fillRect(x, y, w*p, h);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x+w*p, y-2); ctx.lineTo(x+w*p, y+h+2); ctx.stroke();
+  ctx.fillStyle='#5a4410'; ctx.font='bold 9px system-ui'; ctx.textAlign='left'; ctx.textBaseline='bottom'; ctx.fillText('パワー', x, y-5);
 }
 
 function draw(){
@@ -166,7 +185,7 @@ function draw(){
   const bg=ctx.createLinearGradient(0,0,0,H); bg.addColorStop(0,'#f7d94a'); bg.addColorStop(1,'#eeba14');
   ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
   ctx.fillStyle='rgba(255,255,255,.5)';
-  for(const c of [[70,150,26],[300,140,30],[110,470,22],[330,505,20]]){
+  for(const c of [[70,150,26],[300,140,30],[110,430,22]]){
     ctx.beginPath(); ctx.arc(c[0],c[1],c[2],0,6.283); ctx.arc(c[0]+c[2],c[1]+4,c[2]*.8,0,6.283); ctx.arc(c[0]-c[2],c[1]+4,c[2]*.7,0,6.283); ctx.fill(); }
 
   ctx.fillStyle='#e0b84a'; rr(8,8,150,38,8); ctx.fill(); ctx.strokeStyle='#8a6a1f'; ctx.lineWidth=2; rr(8,8,150,38,8); ctx.stroke();
@@ -177,14 +196,12 @@ function draw(){
   lcd(302,8,70,'のこり', ('0'+Math.max(0,coins)).slice(-2));
 
   for(let i=0;i<STATIONS.length;i++){
-    const g = rampGeom(Math.min(i,RAMPS-1));
-    const useExit = (i>=RAMPS);
+    const g = rampGeom(Math.min(i,RAMPS-1)), useExit = (i>=RAMPS);
     const ex = useExit ? g.xExit : g.xEntry, ey = (useExit ? g.yExit : g.yEntry);
     const dir = ((useExit ? g.xExit : g.xEntry) < W/2) ? 1 : -1;
     emoji(STATIONS[i].e, ex + dir*16, ey - 22, 24);
     oval(STATIONS[i].n, ex + dir*16, ey - 4);
   }
-
   for(let i=0;i<RAMPS;i++){
     const g = rampGeom(i);
     ctx.strokeStyle='#fff'; ctx.lineWidth=13; ctx.lineCap='round';
@@ -201,29 +218,30 @@ function draw(){
   }
   ctx.fillStyle='#c0392b'; ctx.font='bold 12px "Yu Gothic",system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('▼ スタート', M+34, TOP-16);
-  ctx.fillStyle='#1a7a3a'; ctx.fillText('ゴール ▶', rampGeom(RAMPS-1).xExit, rampGeom(RAMPS-1).yExit+30);
+  ctx.fillStyle='#1a7a3a'; ctx.fillText('ゴール ▶', rampGeom(RAMPS-1).xExit, rampGeom(RAMPS-1).yExit+28);
 
   if(state==='play'){ const p=coinXY(); drawCoin(p.x,p.y); }
-  for(const s of sparkle){ ctx.globalAlpha=Math.max(0,s.life/24); ctx.fillStyle='#fff6c0'; ctx.fillRect(s.x-1.5,s.y-1.5,3,3); }
+  for(const s of sparkle){ ctx.globalAlpha=Math.max(0,s.life/26); ctx.fillStyle='#fff6c0'; ctx.fillRect(s.x-1.5,s.y-1.5,3,3); }
   ctx.globalAlpha=1;
 
+  drawPowerMeter();
   drawLever();
 
   if(state==='play'){
     ctx.fillStyle='#5a4410'; ctx.font='bold 11px "Yu Gothic",system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
-    ctx.fillText(STATIONS[coin.i].n+' → '+STATIONS[coin.i+1].n, W/2-20, H-6);
+    ctx.fillText(STATIONS[coin.i].n+' → '+STATIONS[coin.i+1].n, W/2, H-8);
   }
 
   if(state!=='play'){
-    ctx.fillStyle='rgba(20,16,6,.75)'; rr(28,H/2-126,W-56,252,14); ctx.fill();
+    ctx.fillStyle='rgba(20,16,6,.78)'; rr(28,H/2-130,W-56,260,14); ctx.fill();
     ctx.textAlign='center'; ctx.textBaseline='middle';
     if(state==='title'){
-      ctx.fillStyle='#fff'; ctx.font='bold 24px "Yu Gothic",system-ui,sans-serif'; ctx.fillText('10円ゲーム',W/2,H/2-80);
-      ctx.fillStyle='#f2e2a8'; ctx.font='13px "Yu Gothic",system-ui'; ctx.fillText('レバーを引いて10円玉を転がす',W/2,H/2-48);
-      ctx.fillStyle='#7ae0a0'; ctx.font='12px "Yu Gothic",system-ui'; ctx.fillText('長押し＝引く／離すと止まる',W/2,H/2-24);
-      ctx.fillStyle='rgba(255,255,255,.8)'; ctx.font='12px "Yu Gothic",system-ui'; ctx.fillText('穴は勢いで越え、緑のゾーンで止めて次の段へ',W/2,H/2+0);
-      ctx.fillStyle='rgba(255,255,255,.7)'; ctx.font='11px "Yu Gothic",system-ui'; ctx.fillText('行き過ぎ＝落下／穴で減速＝落下（のこり−1）',W/2,H/2+22);
-      ctx.fillStyle='#f2c020'; ctx.font='bold 14px system-ui'; ctx.fillText('タップ / スペースで開始',W/2,H/2+62);
+      ctx.fillStyle='#fff'; ctx.font='bold 24px "Yu Gothic",system-ui,sans-serif'; ctx.fillText('10円ゲーム',W/2,H/2-84);
+      ctx.fillStyle='#f2e2a8'; ctx.font='13px "Yu Gothic",system-ui'; ctx.fillText('レバーを引いてパワーをためる',W/2,H/2-52);
+      ctx.fillStyle='#7ae0a0'; ctx.font='12px "Yu Gothic",system-ui'; ctx.fillText('離すと10円が発射！緑の帯で離すのがコツ',W/2,H/2-28);
+      ctx.fillStyle='rgba(255,255,255,.8)'; ctx.font='12px "Yu Gothic",system-ui'; ctx.fillText('緑ゾーンで止まれば次の段へ',W/2,H/2-4);
+      ctx.fillStyle='rgba(255,255,255,.7)'; ctx.font='11px "Yu Gothic",system-ui'; ctx.fillText('強すぎ＝行き過ぎ落下／弱すぎ＝穴で落下',W/2,H/2+18);
+      ctx.fillStyle='#f2c020'; ctx.font='bold 14px system-ui'; ctx.fillText('タップ / スペースで開始',W/2,H/2+58);
     } else {
       const fade=Math.min(1,endT/12); ctx.globalAlpha=fade;
       if(state==='win'){ ctx.fillStyle='#f2c020'; ctx.font='bold 26px "Yu Gothic",system-ui,sans-serif'; ctx.fillText('大当たり！',W/2,H/2-54);
@@ -238,7 +256,7 @@ function draw(){
       ctx.globalAlpha=1;
     }
   }
-  ctx.fillStyle='rgba(90,68,16,.5)'; ctx.font='7px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('juen v3',5,6);
+  ctx.fillStyle='rgba(90,68,16,.5)'; ctx.font='7px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('juen v4',5,6);
   ctx.restore();
 }
 function loop(){ update(); draw(); requestAnimationFrame(loop); }
