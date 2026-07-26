@@ -183,8 +183,8 @@ function makeWave(n){
 // 一部の敵は隊列を離れて独立移動（フロート）する＝動きが多彩。
 function makeUraWave(n){
   enemies = [];
-  const cols = 7, rows = Math.min(3 + Math.floor(n/6), 5);
-  const gapX = 42, gapY = 32, x0 = (W - (cols-1)*gapX)/2, y0 = 84;
+  const cols = 8, rows = Math.min(4 + Math.floor(n/5), 7);   // 敵を増量（最大8×7=56体）
+  const gapX = 40, gapY = 32, x0 = (W - (cols-1)*gapX)/2, y0 = 80;
   const baseHp = 2 + Math.floor(n/7);                // 基礎HPを底上げ（すぐ倒れないように）
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
@@ -2258,7 +2258,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v52', s:24, gap:30},
+      {t:'書類インベーダー　v53', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2318,7 +2318,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v52", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v53", 5, 9);
   ctx.restore();
 }
 
