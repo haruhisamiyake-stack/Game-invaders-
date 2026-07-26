@@ -86,6 +86,8 @@ const zeirishi = new Image(); let zeirishiReady = false;
 zeirishi.onload = ()=> zeirishiReady = true; zeirishi.src = 'assets/zeirishi.png';
 const corpLogo = new Image(); let corpLogoReady = false;
 corpLogo.onload = ()=> corpLogoReady = true; corpLogo.src = 'assets/astrust-logo.png';
+const badgeImg = new Image(); let badgeReady = false;
+badgeImg.onload = ()=> badgeReady = true; badgeImg.src = 'assets/zeirishi-badge.png';
 
 const RANK_IMG = Array.from({ length: 10 }, ()=> new Image());
 const RANK_READY = Array.from({ length: 10 }, ()=> false);
@@ -2230,7 +2232,8 @@ function drawItem(it){
   }
   if(rare){   // 税理士＝バッジそのものをアイテムに
     ctx.rotate(Math.sin(it.t/40)*.10);
-    drawBadge(r*1.35);
+    if(badgeReady){ const s = r*2.7; ctx.drawImage(badgeImg, -s/2, -s/2, s, s); }
+    else drawBadge(r*1.35);
     ctx.restore();
     return;
   }
@@ -2271,8 +2274,9 @@ function drawChips(){
     ctx.font = '9px "Yu Mincho",serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     if(o.d.k === 'ally'){   // 税理士＝ミニバッジ＋体数
-      ctx.save(); ctx.translate(x+7, y+7); drawBadge(5); ctx.restore();
-      ctx.fillStyle = '#ffd23f'; ctx.fillText(o.tag || '', x+14, y+7);
+      if(badgeReady) ctx.drawImage(badgeImg, x+2, y+2, 11, 11);
+      else { ctx.save(); ctx.translate(x+7, y+7); drawBadge(5); ctx.restore(); }
+      ctx.fillStyle = '#ffd23f'; ctx.fillText(o.tag || '', x+15, y+7);
     } else {
       ctx.fillStyle = o.d.col;
       ctx.fillText(o.d.label + (o.tag ? o.tag : (o.n ? o.n + '発' : (o.d.k === 'shield' ? '1枚' : ''))), x+4, y+7);
@@ -2578,7 +2582,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v71', s:24, gap:30},
+      {t:'書類インベーダー　v72', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2638,7 +2642,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v71", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v72", 5, 9);
   ctx.restore();
 }
 
