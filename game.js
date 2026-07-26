@@ -665,7 +665,7 @@ function bossDown(){
     // BGMはボス曲を継続（頭出しし直したい場合は bgmSet('boss', true)）
   } else if(b.phase === 2){
     b.phase = 3;
-    b.hp = b.max = 900;         // 第三形態はさらにHP増（5倍）
+    b.hp = b.max = 1800;        // 第三形態（かんた）はさらにHP増（倍化）
     b.next = b.max - 15;
     b.hurt = 18; b.cool = 90;
     b.t = 0;
@@ -1288,7 +1288,7 @@ function spawnShochoAdds(b){
   for(const side of [-1, 1]){
     minions.push({
       x0: W/2 + side*96, y0: 150, x: W/2 + side*96, y: 150,
-      w: 52, h: 56, hp: 130, max: 130, hurt: 0, t: Math.floor(Math.random()*60),
+      w: 52, h: 56, hp: 260, max: 260, hurt: 0, t: Math.floor(Math.random()*60),
       cool: 60 + Math.floor(Math.random()*30), phase: side > 0 ? 3.14 : 0
     });
   }
@@ -2523,7 +2523,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v67', s:24, gap:30},
+      {t:'書類インベーダー　v68', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2583,7 +2583,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v67", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v68", 5, 9);
   ctx.restore();
 }
 
