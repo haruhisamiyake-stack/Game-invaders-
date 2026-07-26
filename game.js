@@ -1730,6 +1730,16 @@ function drawSealShip(x, y, scale, alpha){
   for(let r=0;r<2;r++) for(let c=0;c<4;c++){ ctx.fillRect(-10.5 + c*5.4, -0.3 + r*4.7, 3.8, 3.3); }
   ctx.restore();
 }
+// 虹色グラデーション（tでゆっくり流れる）。x0→x1の横帯に7色を巡回配置
+function rainbowGrad(x0, x1, t){
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  const sh = (t || 0) / 30;
+  for(let i=0;i<=6;i++){
+    const hue = ((i/6 + sh) % 1) * 360;
+    g.addColorStop(i/6, 'hsl(' + hue.toFixed(0) + ',95%,58%)');
+  }
+  return g;
+}
 function drawStar(x, y, r){
   ctx.beginPath();
   for(let i=0;i<8;i++){ const a = i/8*Math.PI*2, rr = i%2 ? r*0.4 : r;
@@ -2057,9 +2067,15 @@ function drawItem(it){
   ctx.fillRect(-r, -r, r*2, r*2);
   ctx.strokeStyle = d.col; ctx.lineWidth = 2;
   ctx.strokeRect(-r, -r, r*2, r*2);
-  ctx.fillStyle = d.col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = '12px "Yu Mincho",serif';
-  ctx.fillText(d.label, 0, 1);
+  if(rare){   // 税理士の「税」は虹色（時間で流れる）
+    ctx.fillStyle = rainbowGrad(-r, r, it.t);
+    ctx.fillText(d.label, 0, 1);
+  } else {
+    ctx.fillStyle = d.col;
+    ctx.fillText(d.label, 0, 1);
+  }
   if(d.k === 'heal'){   // 回復薬は右上に小さな十字（回復の記号）
     ctx.fillStyle = '#3aa76d';
     ctx.fillRect(r-5, -r+1, 4, 1.4); ctx.fillRect(r-4.3, -r+.3, 1.4, 4);
@@ -2081,8 +2097,9 @@ function drawChips(){
     const x = 8 + i*40, y = H-80;   // 自機（最下段）と重ならないよう一段上へ
     ctx.fillStyle = 'rgba(14,23,48,.6)'; ctx.fillRect(x, y, 36, 14);
     ctx.strokeStyle = o.d.col; ctx.lineWidth = 1; ctx.strokeRect(x+.5, y+.5, 35, 13);
-    ctx.fillStyle = o.d.col; ctx.font = '9px "Yu Mincho",serif';
+    ctx.font = '9px "Yu Mincho",serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = o.d.k === 'ally' ? rainbowGrad(x+2, x+34, frame) : o.d.col;   // 税理士の「税」は虹色
     ctx.fillText(o.d.label + (o.tag ? o.tag : (o.n ? o.n + '発' : (o.d.k === 'shield' ? '1枚' : ''))), x+4, y+7);
     ctx.fillStyle = o.d.col;
     ctx.fillRect(x, y+13, 36*o.t, 1.5);
@@ -2358,7 +2375,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v56', s:24, gap:30},
+      {t:'書類インベーダー　v57', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2418,7 +2435,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v56", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v57", 5, 9);
   ctx.restore();
 }
 
