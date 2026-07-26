@@ -322,13 +322,13 @@ function makeBoss(type){
     const hp = 60 + uraStage * 4;
     bossObj = { type: 'kousai', x: W/2, y: 118, y0: 118, w: 104, h: 156, hp: hp, max: hp,
                 t: 0, cool: Math.max(28, 60 - uraStage), hurt: 0, next: hp - 12,
-                mslCool: Math.max(80, 150 - uraStage) };
+                mslCool: Math.max(80, 150 - uraStage), spCool: 90 };
   } else if(type === 'chosa'){
     // 裏面の中ボス：税務調査官。女将よりややタフ
     const hp = 70 + uraStage * 4;
     bossObj = { type: 'chosa', x: W/2, y: 118, y0: 118, w: 124, h: 150, hp: hp, max: hp,
                 t: 0, cool: Math.max(26, 58 - uraStage), hurt: 0, next: hp - 12,
-                mslCool: Math.max(80, 145 - uraStage) };
+                mslCool: Math.max(80, 145 - uraStage), spCool: 110 };
   } else {
     // ラスボス（所長）：3段階。HPは倍設定（歯ごたえ重視）
     bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 140, max: 140,
@@ -890,6 +890,33 @@ function updateMidBoss(b){
     const aim = Math.atan2(player.y - b.y, player.x - b.x);
     spawnMissile(b.x, b.y + b.h/2 - 4, 'homing', aim, false);
     beep(520, .12, 'square', .04);
+  }
+  // ボス固有武器
+  if(b.type === 'kousai' || b.type === 'chosa'){
+    b.spCool--;
+    if(b.spCool <= 0){
+      const rage = b.hp < b.max/2;
+      const sy = b.y + b.h/2 - 10, aim = Math.atan2(player.y - sy, player.x - b.x);
+      if(b.type === 'kousai'){
+        // 接待攻撃：❤️🍶🍺 を扇状にばらまく
+        b.spCool = rage ? 80 : 120;
+        const emo = ['❤️','🍶','🍺'], n = rage ? 6 : 5, sp = 2.0;
+        for(let i=0;i<n;i++){
+          const a = aim + (i-(n-1)/2)*.24;
+          ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, kind: 2, emoji: emo[i%emo.length] });
+        }
+        beep(880, .1, 'sine', .05); beep(1180, .08, 'sine', .04);
+      } else {
+        // 追徴スタンプ：認印「追」を投げつける（重く速い）
+        b.spCool = rage ? 95 : 140;
+        const n = rage ? 4 : 3, sp = 2.7;
+        for(let i=0;i<n;i++){
+          const a = aim + (i-(n-1)/2)*.20;
+          ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, kind: 3 });
+        }
+        beep(150, .16, 'square', .06);
+      }
+    }
   }
   // 命中判定
   for(const bl of bullets){
@@ -1623,7 +1650,20 @@ function draw(){
       else { ctx.fillStyle = '#3fd0e6'; ctx.fillRect(b.x-2, b.y-5, 4, 10); }        // 通常弾（シアン）
     });
     ebullets.forEach(b=>{
-      if(b.kind){
+      if(b.kind === 2 && b.emoji){
+        // 女将の接待弾（❤️🍶🍺）
+        ctx.font = '19px "Segoe UI Emoji","Noto Color Emoji",serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(b.emoji, b.x, b.y + 1);
+      } else if(b.kind === 3){
+        // 調査官の追徴スタンプ（回転する朱の認印「追」）
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(frame * 0.15);
+        ctx.fillStyle = '#c0392b'; ctx.fillRect(-8, -8, 16, 16);
+        ctx.strokeStyle = '#5a0b0d'; ctx.lineWidth = 1.5; ctx.strokeRect(-8, -8, 16, 16);
+        ctx.fillStyle = '#ffe6cc'; ctx.font = '11px "Yu Mincho",serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('追', 0, 1);
+        ctx.restore();
+      } else if(b.kind){
         // ボス弾：明るい赤＋光背＋白い芯で背景から浮かせる
         ctx.fillStyle = 'rgba(255,90,90,.30)';
         ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI*2); ctx.fill();
@@ -1636,6 +1676,7 @@ function draw(){
         ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI*2); ctx.fill();
       }
     });
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     drawMissiles();
     items.forEach(drawItem);
     if(beam) drawBeam();
@@ -1678,7 +1719,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v33', s:24, gap:30},
+      {t:'書類インベーダー　v34', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1723,7 +1764,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v33", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v34", 5, 9);
   ctx.restore();
 }
 
