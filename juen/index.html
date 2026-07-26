@@ -24,92 +24,49 @@
 
 <script>
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
-// board aspect from reference image 1290x1489
-const BW=1290, BH=1489, ASPECT=BW/BH;      // ~0.866
+const BW=1290, BH=1489, ASPECT=BW/BH;
 let CW=430, CH=Math.round(CW/ASPECT);
-
 const board=new Image(); board.src='board.png?v=5'; let boardReady=false;
 board.onload=()=>{boardReady=true;};
 
-/* ---- course: checkpoints in board-percent coords tracing the real path ---- */
-const CP=[
-  {n:'スタート', x:38, y:88, start:true, pts:0},
-  {n:'相撲',     x:18, y:85, pts:100},
-  {n:'港',       x:7,  y:70, pts:100},
-  {n:'船',       x:21, y:60, pts:150},
-  {n:'お寺',     x:9,  y:46, pts:150},
-  {n:'スカイツリー', x:16, y:29, pts:200},
-  {n:'東京駅',   x:10, y:18, pts:200},
-  {n:'スポーツ', x:52, y:20, pts:250},
-  {n:'富士山',   x:83, y:16, pts:300},
-  {n:'お城',     x:87, y:32, pts:250},
-  {n:'神社',     x:38, y:34, pts:200},
-  {n:'たこやき', x:59, y:44, pts:200},
-  {n:'灯台',     x:86, y:56, pts:250},
-  {n:'東京タワー', x:46, y:57, pts:300},
-  {n:'工場',     x:91, y:84, pts:300},
-  {n:'ゴール',   x:47, y:88, goal:true, pts:1000},
-];
-/* holes (hazards) in board-percent coords, r in board-% of width */
-const HOLES=[
-  {x:9, y:38, r:4.6}, {x:49,y:42,r:3.6}, {x:86,y:47,r:3.3},
-  {x:7, y:62, r:4.6}, {x:55,y:63,r:3.6}, {x:18,y:79,r:4.2},
-  {x:43,y:80,r:3.2}, {x:30,y:73,r:3.0}, {x:70,y:70,r:3.2},
-];
+/* coin path traced along the board's real white lanes (x%,y% of board) */
+const WP=[[37.8,90.0],[41.2,89.2],[43.7,87.0],[43.7,83.0],[40.0,79.8],[23.9,79.8],[18.0,84.9],[17.1,84.9],[16.1,84.1],[13.6,84.1],[5.9,77.4],[5.6,72.3],[4.7,70.7],[6.2,70.4],[15.2,62.6],[17.7,62.6],[20.8,59.9],[11.5,60.7],[6.8,64.2],[5.0,61.8],[5.0,48.9],[6.5,47.5],[6.8,50.0],[21.7,50.0],[25.4,46.7],[30.4,46.7],[38.4,39.8],[48.4,39.8],[54.0,34.9],[54.0,34.1],[52.7,33.8],[47.4,29.3],[40.0,28.2],[36.9,25.5],[20.8,25.5],[15.8,29.8],[14.9,26.9],[10.5,23.1],[10.5,19.3],[9.9,18.8],[44.7,18.8],[48.1,21.8],[64.5,21.8],[78.1,21.5],[81.9,18.3],[71.6,19.6],[65.4,25.0],[65.4,26.9],[66.7,27.9],[75.3,28.5],[80.6,32.8],[85.9,32.8],[56.4,32.8],[53.6,35.2],[50.2,35.2],[48.7,36.3],[39.4,36.3],[54.6,36.3],[59.5,40.6],[59.5,41.9],[62.3,44.3],[58.9,44.9],[72.6,44.9],[85.6,55.9],[85.0,57.0],[85.3,55.6],[77.8,54.8],[76.6,55.1],[74.4,57.0],[46.2,57.5],[45.9,73.6],[43.4,76.3],[50.5,82.2],[85.0,81.9],[85.9,81.1],[89.0,81.1],[89.9,81.9],[88.1,81.1],[65.7,81.4],[57.4,88.7],[56.4,88.7],[54.9,90.0],[46.8,90.0]];
+const LM=[{n:"スタート",i:0,pts:0},{n:"相撲",i:6,pts:100},{n:"港",i:13,pts:100},{n:"船",i:16,pts:150},{n:"お寺",i:21,pts:150},{n:"スカイツリー",i:35,pts:200},{n:"東京駅",i:39,pts:200},{n:"スポーツ",i:41,pts:250},{n:"富士山",i:44,pts:300},{n:"お城",i:51,pts:250},{n:"神社",i:56,pts:200},{n:"たこやき",i:61,pts:200},{n:"灯台",i:64,pts:250},{n:"東京タワー",i:69,pts:300},{n:"工場",i:76,pts:300},{n:"ゴール",i:82,pts:1000}];
+const HOLES=[{x:9,y:38,r:4.6},{x:49,y:42,r:3.6},{x:86,y:47,r:3.3},{x:7,y:62,r:4.6},
+  {x:55,y:63,r:3.6},{x:18,y:79,r:4.2},{x:43,y:80,r:3.2},{x:30,y:73,r:3.0},{x:70,y:70,r:3.2}];
 
-/* ---- geometry built on resize ---- */
-let P=[], cumS=[], segLenMax=1, DIST_MAX=1, holeArc=[], captureR=1;
-function bx(p){return p.x/100*CW;}
-function by(p){return p.y/100*CH;}
-function nearestOnPath(px,py){
-  let best={s:0,d:1e9};
-  for(let i=0;i<P.length-1;i++){
-    const a=P[i], b=P[i+1];
-    const dx=b.x-a.x, dy=b.y-a.y, L2=dx*dx+dy*dy||1;
-    let t=((px-a.x)*dx+(py-a.y)*dy)/L2; t=Math.max(0,Math.min(1,t));
-    const qx=a.x+dx*t, qy=a.y+dy*t;
-    const d=Math.hypot(px-qx,py-qy);
-    if(d<best.d) best={s:cumS[i]+Math.hypot(qx-a.x,qy-a.y), d};
-  }
-  return best;
-}
+/* geometry */
+let P=[], cumS=[], lmS=[], DIST_MAX=1, holePx=[], captureR=1, totalL=1;
 function ptAt(s){
-  s=Math.max(0,Math.min(cumS[cumS.length-1],s));
+  s=Math.max(0,Math.min(totalL,s));
   for(let i=0;i<P.length-1;i++){
-    if(s<=cumS[i+1]){
-      const a=P[i],b=P[i+1], seg=cumS[i+1]-cumS[i]||1, t=(s-cumS[i])/seg;
-      return {x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t};
-    }
+    if(s<=cumS[i+1]){const a=P[i],b=P[i+1],seg=cumS[i+1]-cumS[i]||1,t=(s-cumS[i])/seg;
+      return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};}
   }
-  return {x:P[P.length-1].x, y:P[P.length-1].y};
+  return {x:P[P.length-1].x,y:P[P.length-1].y};
 }
 function buildGeom(){
-  P=CP.map(p=>({x:bx(p),y:by(p)}));
+  P=WP.map(p=>({x:p[0]/100*CW,y:p[1]/100*CH}));
   cumS=[0];
   for(let i=1;i<P.length;i++) cumS[i]=cumS[i-1]+Math.hypot(P[i].x-P[i-1].x,P[i].y-P[i-1].y);
-  segLenMax=0;
-  for(let i=1;i<CP.length;i++) segLenMax=Math.max(segLenMax,cumS[i]-cumS[i-1]);
-  captureR=Math.min(30, CW*0.058);
-  DIST_MAX=segLenMax+captureR*0.7;
-  holeArc=HOLES.map(h=>{
-    const hx=h.x/100*CW, hy=h.y/100*CH, hr=h.r/100*CW;
-    const np=nearestOnPath(hx,hy);
-    return {x:hx,y:hy,r:hr,s:np.s};
-  });
+  totalL=cumS[cumS.length-1];
+  lmS=LM.map(l=>cumS[l.i]);
+  DIST_MAX=0;
+  for(let k=1;k<lmS.length;k++) DIST_MAX=Math.max(DIST_MAX,lmS[k]-lmS[k-1]);
+  captureR=Math.min(34,CW*0.07);
+  DIST_MAX+=captureR*0.6;
+  holePx=HOLES.map(h=>({x:h.x/100*CW,y:h.y/100*CH,r:h.r/100*CW}));
 }
 function resize(){
-  const availW=Math.min(window.innerWidth-12, 460);
-  const availH=window.innerHeight-12;
-  CW=Math.min(availW, availH*ASPECT);
-  CH=CW/ASPECT;
+  const availW=Math.min(window.innerWidth-12,460), availH=window.innerHeight-12;
+  CW=Math.min(availW,availH*ASPECT); CH=CW/ASPECT;
   const dpr=Math.min(2,window.devicePixelRatio||1);
   cv.width=CW*dpr; cv.height=CH*dpr; cv.style.width=CW+'px'; cv.style.height=CH+'px';
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  buildGeom();
+  ctx.setTransform(dpr,0,0,dpr,0,0); buildGeom();
 }
 window.addEventListener('resize',resize);
 
-/* ---- audio ---- */
+/* audio */
 let AC=null;
 function beep(f,d,t,g){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();
   const o=AC.createOscillator(),ga=AC.createGain();o.type=t||'square';o.frequency.value=f;
@@ -122,172 +79,149 @@ function sfxScore(){beep(880,0.09,'square',0.16);setTimeout(()=>beep(1320,0.12,'
 function sfxFail(){beep(200,0.25,'sawtooth',0.18);setTimeout(()=>beep(140,0.3,'sawtooth',0.16),120);}
 function sfxWin(){[523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,0.18,'square',0.18),i*130));}
 
-/* ---- game state ---- */
+/* state */
 let G;
-function reset(){
-  G={state:'ready', coinS:0, reached:0, score:0, coins:8,
-     power:0, pdir:1, vel:0, msg:'', msgT:0, pop:[], t:0, flash:0};
-}
+function reset(){G={state:'ready',coinS:0,reached:0,score:0,coins:8,power:0,pdir:1,vel:0,msg:'',msgT:0,pop:[],t:0,flash:0};}
 reset();
 
-/* input */
-function startCharge(){ if(G.state==='ready'){G.state='charging';G.power=0;G.pdir=1;} }
-function release(){
-  if(G.state==='charging'){
-    G.state='rolling';
-    const D=G.power/100*DIST_MAX*(0.97+Math.random()*0.06);
-    G.vel=Math.sqrt(2*0.22*Math.max(4,D));
-    sfxRoll();
-  }
-}
+function startCharge(){if(G.state==='ready'){G.state='charging';G.power=0;G.pdir=1;}}
+function release(){if(G.state==='charging'){G.state='rolling';
+  const D=G.power/100*DIST_MAX*(0.97+Math.random()*0.06);
+  G.vel=Math.sqrt(2*0.22*Math.max(4,D)); sfxRoll();}}
 cv.addEventListener('pointerdown',e=>{e.preventDefault();
   if(G.state==='won'||G.state==='over'){reset();return;} startCharge();});
 cv.addEventListener('pointerup',e=>{e.preventDefault();release();});
-window.addEventListener('keydown',e=>{
-  if(e.code==='Space'){e.preventDefault();
-    if(G.state==='won'||G.state==='over'){reset();return;}
-    if(G.state==='ready')startCharge();}});
+window.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();
+  if(G.state==='won'||G.state==='over'){reset();return;} if(G.state==='ready')startCharge();}});
 window.addEventListener('keyup',e=>{if(e.code==='Space'){e.preventDefault();release();}});
-
 function popText(s,txt,col){const p=ptAt(s);G.pop.push({x:p.x,y:p.y,txt,col,t:0});}
 
-/* ---- update ---- */
 function update(){
-  G.t++;
-  if(G.flash>0)G.flash--;
-  if(G.msgT>0)G.msgT--;
+  G.t++; if(G.flash>0)G.flash--; if(G.msgT>0)G.msgT--;
   G.pop=G.pop.filter(p=>{p.t++;p.y-=0.5;return p.t<70;});
   if(G.state==='charging'){
     G.power+=2.4*G.pdir;
     if(G.power>=100){G.power=100;G.pdir=-1;}
     if(G.power<=0){G.power=0;G.pdir=1;}
     if(G.t%4===0)sfxCharge(G.power);
-  } else if(G.state==='rolling'){
+  }else if(G.state==='rolling'){
     G.coinS+=G.vel; G.vel-=0.22;
-    const totalL=cumS[cumS.length-1];
     if(G.coinS>=totalL){G.coinS=totalL;G.vel=0;}
     if(G.vel<=0){G.vel=0;resolveRest();}
   }
 }
 function resolveRest(){
   const s=G.coinS;
-  if(s>=cumS[CP.length-1]-captureR){ collect(CP.length-1); winGame(); return; }
-  const nextIdx=G.reached+1, nextS=cumS[nextIdx];
+  if(s>=lmS[LM.length-1]-captureR){collect(LM.length-1);winGame();return;}
+  const nextIdx=G.reached+1, nextS=lmS[nextIdx];
   const rp=ptAt(s);
-  for(const h of holeArc){ if(Math.hypot(rp.x-h.x,rp.y-h.y)<h.r){ failCoin('穴に落ちた！'); return; } }
-  if(s>=nextS-captureR && s<=nextS+captureR){ collect(nextIdx); G.state='ready'; return; }
-  if(s>nextS+captureR){ failCoin('行き過ぎ！'); return; }
+  for(const h of holePx){ if(Math.hypot(rp.x-h.x,rp.y-h.y)<h.r){failCoin('穴に落ちた！');return;} }
+  if(s>=nextS-captureR && s<=nextS+captureR){collect(nextIdx);G.state='ready';return;}
+  if(s>nextS+captureR){failCoin('行き過ぎ！');return;}
   G.state='ready'; G.msg='もう一歩！'; G.msgT=60;
 }
 function collect(idx){
   while(G.reached<idx){
-    G.reached++; const c=CP[G.reached]; G.score+=c.pts;
-    if(!c.goal) popText(cumS[G.reached],'+'+c.pts,'#2e7d32');
-    G.coinS=cumS[G.reached];
+    G.reached++; const c=LM[G.reached]; G.score+=c.pts;
+    if(G.reached<LM.length-1) popText(lmS[G.reached],'+'+c.pts,'#1b7a2e');
+    G.coinS=lmS[G.reached];
   }
   sfxScore(); G.flash=8;
-  if(!CP[idx].goal){G.msg=CP[idx].n+' 到着！';G.msgT=70;}
+  if(idx<LM.length-1){G.msg=LM[idx].n+' 到着！';G.msgT=70;}
 }
 function failCoin(reason){
   G.coins--; sfxFail(); popText(G.coinS,'MISS','#c0392b');
   G.msg=reason; G.msgT=80; G.flash=12;
-  if(G.coins<=0){ G.state='over'; return; }
-  G.coinS=cumS[G.reached]; G.state='ready';
+  if(G.coins<=0){G.state='over';return;}
+  G.coinS=lmS[G.reached]; G.state='ready';
 }
 function winGame(){G.state='won';G.score+=G.coins*200;sfxWin();}
 function targetBand(){
-  const nextS=cumS[Math.min(G.reached+1,CP.length-1)];
+  const nextS=lmS[Math.min(G.reached+1,LM.length-1)];
   const need=nextS-G.coinS;
-  const lo=(need-captureR)/DIST_MAX*100, hi=(need+captureR*0.6)/DIST_MAX*100;
-  return [Math.max(0,Math.min(100,lo)), Math.max(0,Math.min(100,hi))];
+  return [Math.max(0,Math.min(100,(need-captureR)/DIST_MAX*100)),
+          Math.max(0,Math.min(100,(need+captureR*0.6)/DIST_MAX*100))];
 }
 
-/* ---- draw ---- */
+/* draw */
 function draw(){
   ctx.clearRect(0,0,CW,CH);
   if(boardReady) ctx.drawImage(board,0,0,CW,CH);
-  else { ctx.fillStyle='#e9c23b'; ctx.fillRect(0,0,CW,CH); }
+  else {ctx.fillStyle='#e9c23b';ctx.fillRect(0,0,CW,CH);}
 
-  ctx.save();
-  ctx.strokeStyle='rgba(255,255,255,.28)'; ctx.lineWidth=Math.max(6,CW*0.02);
-  ctx.lineJoin='round'; ctx.lineCap='round';
-  ctx.beginPath(); P.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-  ctx.strokeStyle='rgba(40,40,40,.5)'; ctx.lineWidth=Math.max(2,CW*0.006);
-  ctx.setLineDash([CW*0.02,CW*0.02]);
-  ctx.beginPath(); P.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-  ctx.setLineDash([]); ctx.restore();
-
-  const nextIdx=Math.min(G.reached+1,CP.length-1);
-  CP.forEach((c,i)=>{
+  // landmark indicators (collected = green tick, next = pulsing red)
+  const nextIdx=Math.min(G.reached+1,LM.length-1);
+  LM.forEach((l,i)=>{
     if(i===0)return;
-    const x=bx(c),y=by(c);
-    if(i<=G.reached){ ring(x,y,captureR*0.7,'rgba(46,125,50,.9)',3); }
-    else if(i===nextIdx){ ctx.fillStyle='rgba(255,90,90,.15)';ctx.beginPath();ctx.arc(x,y,captureR,0,7);ctx.fill();
-      ring(x,y,captureR,'rgba(255,70,70,.95)',4); }
+    const p=ptAt(lmS[i]);
+    if(i<=G.reached){ ring(p.x,p.y,captureR*0.55,'rgba(27,122,46,.9)',3); }
+    else if(i===nextIdx){
+      const pulse=captureR*(0.9+0.12*Math.sin(G.t*0.18));
+      ctx.fillStyle='rgba(255,80,80,.16)';ctx.beginPath();ctx.arc(p.x,p.y,pulse,0,7);ctx.fill();
+      ring(p.x,p.y,pulse,'rgba(255,60,60,.95)',4);
+    }
   });
 
   const cp=ptAt(G.coinS);
-  drawCoin(cp.x, cp.y, CW*0.045);
+  // direction of travel for a little motion trail
+  drawCoin(cp.x,cp.y,CW*0.042);
 
   G.pop.forEach(p=>{ctx.globalAlpha=Math.max(0,1-p.t/70);ctx.fillStyle=p.col;
     ctx.font='bold '+Math.round(CW*0.05)+'px sans-serif';ctx.textAlign='center';
+    ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=3;ctx.strokeText(p.txt,p.x,p.y);
     ctx.fillText(p.txt,p.x,p.y);ctx.globalAlpha=1;});
 
   drawHUD(); drawMeter();
-  if(G.msgT>0) drawBanner(G.msg);
-  if(G.state==='won') drawEnd('🎉 ゴール！ 🎉','スコア '+G.score,'#2e7d32');
-  if(G.state==='over') drawEnd('GAME OVER','スコア '+G.score,'#c0392b');
+  if(G.msgT>0)drawBanner(G.msg);
+  if(G.state==='won')drawEnd('🎉 ゴール！ 🎉','スコア '+G.score,'#2e7d32');
+  if(G.state==='over')drawEnd('GAME OVER','スコア '+G.score,'#c0392b');
 }
 function ring(x,y,r,c,w){ctx.strokeStyle=c;ctx.lineWidth=w;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();}
 function drawCoin(x,y,r){
   ctx.save();ctx.translate(x,y);
-  ctx.shadowColor='rgba(0,0,0,.35)';ctx.shadowBlur=6;ctx.shadowOffsetY=3;
+  ctx.shadowColor='rgba(0,0,0,.4)';ctx.shadowBlur=7;ctx.shadowOffsetY=3;
   const g=ctx.createRadialGradient(-r*0.3,-r*0.3,r*0.2,0,0,r);
   g.addColorStop(0,'#ffe9a0');g.addColorStop(.6,'#d9a92a');g.addColorStop(1,'#a97b12');
-  ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
-  ctx.shadowColor='transparent';
-  ctx.strokeStyle='#8a6410';ctx.lineWidth=r*0.12;ctx.beginPath();ctx.arc(0,0,r*0.82,0,7);ctx.stroke();
-  ctx.fillStyle='#7a560e';ctx.font='bold '+Math.round(r*0.95)+'px serif';
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();ctx.shadowColor='transparent';
+  ctx.strokeStyle='#8a6410';ctx.lineWidth=r*0.13;ctx.beginPath();ctx.arc(0,0,r*0.82,0,7);ctx.stroke();
+  ctx.fillStyle='#7a560e';ctx.font='bold '+Math.round(r*0.9)+'px serif';
   ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('10',0,r*0.06);
   ctx.restore();ctx.textBaseline='alphabetic';
 }
 function drawHUD(){
-  // cover the board's printed digits, then draw live values aligned to the panels
   ctx.fillStyle='#0a0a0a';
   ctx.fillRect(CW*0.636,CH*0.050,CW*0.145,CH*0.036);
   ctx.fillRect(CW*0.842,CH*0.050,CW*0.079,CH*0.036);
   ctx.fillStyle='#ff5a4a';ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.font='bold '+Math.round(CW*0.045)+'px "Courier New",monospace';
-  ctx.fillText(String(G.score).padStart(4,'0'), CW*0.708, CH*0.069);
-  ctx.fillText(String(Math.max(0,G.coins)).padStart(2,'0'), CW*0.881, CH*0.069);
+  ctx.fillText(String(G.score).padStart(4,'0'),CW*0.708,CH*0.069);
+  ctx.fillText(String(Math.max(0,G.coins)).padStart(2,'0'),CW*0.881,CH*0.069);
   ctx.textBaseline='alphabetic';
 }
 function drawMeter(){
-  const mw=CW*0.7, mh=Math.max(16,CH*0.03), mx=(CW-mw)/2, my=CH*0.945;
-  ctx.fillStyle='rgba(0,0,0,.55)';roundRect(mx-6,my-6,mw+12,mh+12,8);ctx.fill();
+  const mw=CW*0.72,mh=Math.max(16,CH*0.03),mx=(CW-mw)/2,my=CH*0.955;
+  ctx.fillStyle='rgba(0,0,0,.6)';roundRect(mx-6,my-6,mw+12,mh+12,8);ctx.fill();
   ctx.fillStyle='#222';roundRect(mx,my,mw,mh,6);ctx.fill();
   const [lo,hi]=targetBand();
-  ctx.fillStyle='rgba(60,220,90,.85)';
-  ctx.fillRect(mx+mw*lo/100,my,mw*(hi-lo)/100,mh);
+  ctx.fillStyle='rgba(60,220,90,.85)';ctx.fillRect(mx+mw*lo/100,my,mw*(hi-lo)/100,mh);
   const pf=G.state==='charging'?G.power:0;
   ctx.fillStyle=G.power>hi?'#ff5a4a':(G.power>=lo?'#3cdc5a':'#ffd23f');
   ctx.fillRect(mx,my,mw*pf/100,mh);
   ctx.strokeStyle='#fff';ctx.lineWidth=2;roundRect(mx,my,mw,mh,6);ctx.stroke();
   ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold '+Math.round(CW*0.034)+'px sans-serif';
-  const hint = G.state==='ready' ? '押し続けて離す＝発射' :
-               G.state==='charging' ? 'パワー '+Math.round(G.power) : '';
-  ctx.fillText(hint, CW/2, my-12);
+  const hint=G.state==='ready'?'押し続けて離す＝発射':G.state==='charging'?'パワー '+Math.round(G.power):'';
+  ctx.fillText(hint,CW/2,my-10);
 }
 function drawBanner(txt){
   ctx.save();ctx.globalAlpha=Math.min(1,G.msgT/20);
-  ctx.fillStyle='rgba(0,0,0,.7)';const w=CW*0.72,h=CH*0.06,x=(CW-w)/2,y=CH*0.43;
+  ctx.fillStyle='rgba(0,0,0,.72)';const w=CW*0.74,h=CH*0.06,x=(CW-w)/2,y=CH*0.43;
   roundRect(x,y,w,h,10);ctx.fill();
   ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.font='bold '+Math.round(CW*0.05)+'px sans-serif';ctx.fillText(txt,CW/2,y+h/2);
   ctx.restore();ctx.textBaseline='alphabetic';
 }
 function drawEnd(title,sub,col){
-  ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle='rgba(0,0,0,.62)';ctx.fillRect(0,0,CW,CH);
   ctx.textAlign='center';ctx.fillStyle=col==='#2e7d32'?'#8ef0a0':'#ff8a8a';
   ctx.font='bold '+Math.round(CW*0.1)+'px sans-serif';ctx.fillText(title,CW/2,CH*0.44);
   ctx.fillStyle='#fff';ctx.font='bold '+Math.round(CW*0.06)+'px sans-serif';ctx.fillText(sub,CW/2,CH*0.53);
@@ -296,7 +230,6 @@ function drawEnd(title,sub,col){
 function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);
   ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
   ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
-
 function loop(){update();draw();requestAnimationFrame(loop);}
 resize();loop();
 </script>
