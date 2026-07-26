@@ -81,6 +81,10 @@ const ZAKO_READY = Array.from({ length: 9 }, ()=> false);
 ZAKO.forEach((im, i)=>{ im.onload = ()=> ZAKO_READY[i] = true; im.src = 'assets/zako' + (i+1) + '.png'; });
 
 // 裏面ボスの昇格ラダー（税務署の役職10段階）
+// お助け＝自機の前に現れる税理士
+const zeirishi = new Image(); let zeirishiReady = false;
+zeirishi.onload = ()=> zeirishiReady = true; zeirishi.src = 'assets/zeirishi.png';
+
 const RANK_IMG = Array.from({ length: 10 }, ()=> new Image());
 const RANK_READY = Array.from({ length: 10 }, ()=> false);
 RANK_IMG.forEach((im, i)=>{ im.onload = ()=> RANK_READY[i] = true; im.src = 'assets/rank' + (i+1) + '.png'; });
@@ -131,7 +135,7 @@ const ITEMS = [
   { k:'bunshin',label:'分', name:'分身',   col:'#5aa9e6' },   // 僚機（水色）
   { k:'etax',   label:'e', name:'e-Tax',   col:'#39c8c0' },  // 超連射
   { k:'kojo',   label:'控', name:'税額控除', col:'#e0b83a' },  // 一定時間スコア2倍
-  { k:'ally',   label:'士', name:'士業連携', col:'#7ee081' }   // 相棒召喚（弾消し＋援護）
+  { k:'ally',   label:'税', name:'税理士',   col:'#ffd23f' }   // 税理士が自機の前に登場（弾消し＋援護）
 ];
 const MAX_LIVES = 5, MAX_WINGS = 2;
 const STAGE_NAMES = ['', '領収書の山', '請求書の束', '帳簿の海', '年末調整', '確定申告'];
@@ -476,7 +480,7 @@ function splitEnemy(e){
 function summonAlly(){
   ally = 480;
   ebullets = []; missiles = [];   // 会議で一掃
-  shake = 8; flash = 6; setMsg('士業連携！援護＆弾消し', 40);
+  shake = 8; flash = 6; setMsg('税理士 参上！　弾消し＋援護', 40);
   beep(660, .12, 'triangle', .06); beep(990, .12, 'triangle', .05); beep(1320, .14, 'sine', .05);
 }
 function updateAlly(){
@@ -812,12 +816,12 @@ function shoot(){
 /* ---------- パワーアップ ---------- */
 function maybeDrop(x, y, rate){
   if(Math.random() > (rate === undefined ? .14 : rate)) return;
-  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身/e-Tax/税額控除/士業連携
+  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身/e-Tax/税額控除/税理士（レア）
   // 回復薬は満タン時は出さない。分身は最大時は出さない。
   const w = [15, 13, 12, 11,
              lives < MAX_LIVES ? 8 : 0,
              player.wings < MAX_WINGS ? 11 : 0,
-             9, 9, 6];
+             9, 9, 2];   // 税理士はレア（たまにしか出ない）
   const total = w.reduce((a, b) => a + b, 0);
   let r = Math.random()*total, i = 0;
   while(r > w[i] && i < w.length-1){ r -= w[i]; i++; }
@@ -1659,18 +1663,35 @@ function drawSealShip(x, y, scale, alpha){
   for(let r=0;r<2;r++) for(let c=0;c<4;c++){ ctx.fillRect(-10.5 + c*5.4, -0.3 + r*4.7, 3.8, 3.3); }
   ctx.restore();
 }
+function drawStar(x, y, r){
+  ctx.beginPath();
+  for(let i=0;i<8;i++){ const a = i/8*Math.PI*2, rr = i%2 ? r*0.4 : r;
+    const px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr; i ? ctx.lineTo(px,py) : ctx.moveTo(px,py); }
+  ctx.closePath(); ctx.fill();
+}
 function drawAlly(){
   if(ally <= 0) return;
-  const nm = ['会', '弁'];
-  for(let i=0;i<2;i++){
-    const side = i === 0 ? -1 : 1;
-    const ax = player.x + side*26 + Math.sin(frame/12 + i)*2, ay = player.y - 4 + Math.cos(frame/10 + i)*2;
-    ctx.fillStyle = 'rgba(126,224,129,.92)'; ctx.beginPath(); ctx.arc(ax, ay, 8, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = '#0e1730'; ctx.font = 'bold 9px "Yu Mincho",serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(nm[i], ax, ay + 1);
+  const bob = Math.sin(frame/9)*2;
+  const gx = player.x, gy = player.y - 36 + bob;   // 自機の前（上）に税理士が登場
+  // 金の後光
+  ctx.save();
+  const glow = ctx.createRadialGradient(gx, gy, 4, gx, gy, 34);
+  glow.addColorStop(0, 'rgba(255,220,110,' + (.4 + .18*Math.sin(frame/6)) + ')');
+  glow.addColorStop(1, 'rgba(255,210,63,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(gx, gy, 34, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  if(zeirishiReady){
+    const asp = zeirishi.height ? zeirishi.width/zeirishi.height : 0.68, h = 58, w = h*asp;
+    ctx.drawImage(zeirishi, gx - w/2, gy - h/2, w, h);
   }
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  // きらめき（回るスター＋点滅）
+  for(let i=0;i<5;i++){
+    const a = frame/16 + i*1.257, rd = 26 + Math.sin(frame/7 + i)*4;
+    const sx = gx + Math.cos(a)*rd, sy = gy + Math.sin(a)*rd*0.85;
+    ctx.fillStyle = 'rgba(255,244,190,' + (.45 + .45*Math.sin(frame/5 + i*1.3)) + ')';
+    drawStar(sx, sy, 3.2);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,.9)'; drawStar(gx + 14, gy - 18, 2.4 + Math.sin(frame/4));
 }
 function drawPlayer(){
   if(overT > 0) return;   // ゲームオーバー演出中は自機は爆散済み
@@ -1905,8 +1926,22 @@ function drawBtn(){
 
 function drawItem(it){
   const d = ITEMS[it.kind], r = 9, bob = Math.sin(it.t/12)*1.5;
+  const rare = d.k === 'ally';   // 税理士＝レアでキラキラ
   ctx.save();
-  ctx.translate(it.x, it.y + bob); ctx.rotate(Math.sin(it.t/40)*.15);
+  ctx.translate(it.x, it.y + bob);
+  if(rare){
+    // 大きな金の後光＋回転するきらめき（目立たせる）
+    const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 24);
+    g.addColorStop(0, 'rgba(255,225,120,' + (.55 + .25*Math.sin(it.t/5)) + ')');
+    g.addColorStop(1, 'rgba(255,210,63,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI*2); ctx.fill();
+    for(let i=0;i<6;i++){
+      const a = it.t/9 + i*1.047, rd = 15 + Math.sin(it.t/6 + i)*3;
+      ctx.fillStyle = 'rgba(255,248,200,' + (.5 + .5*Math.sin(it.t/4 + i*1.2)) + ')';
+      drawStar(Math.cos(a)*rd, Math.sin(a)*rd, 2.6);
+    }
+  }
+  ctx.rotate(Math.sin(it.t/40)*.15);
   ctx.globalAlpha = .18 + .12*Math.sin(it.t/8);
   ctx.fillStyle = d.col;
   ctx.beginPath(); ctx.arc(0, 0, r*1.7, 0, Math.PI*2); ctx.fill();
@@ -2191,7 +2226,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v49', s:24, gap:30},
+      {t:'書類インベーダー　v50', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2251,7 +2286,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v49", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v50", 5, 9);
   ctx.restore();
 }
 
