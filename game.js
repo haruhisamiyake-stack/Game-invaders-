@@ -180,14 +180,14 @@ function makeUraWave(n){
   enemies = [];
   const cols = 7, rows = Math.min(3 + Math.floor(n/6), 5);
   const gapX = 42, gapY = 32, x0 = (W - (cols-1)*gapX)/2, y0 = 84;
-  const baseHp = 1 + Math.floor(n/13);               // 面が進むと基礎HP増（少し硬く）
+  const baseHp = 2 + Math.floor(n/7);                // 基礎HPを底上げ（すぐ倒れないように）
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
       const tough = (r === 0);
       const sprite = (r*2 + c) % 9;                    // 9種
       const tr = sprite % 4;                           // 特性は4種を循環
       const elite = sprite >= 4;                       // 後半5種はエリート（硬い・高得点）
-      let hp = baseHp + (tough ? 1 + Math.min(2, Math.floor(n/8)) : 0) + (elite ? 1 : 0);
+      let hp = baseHp + (tough ? 2 + Math.min(3, Math.floor(n/7)) : 0) + (elite ? 2 : 0);
       const e = { x: x0 + c*gapX, y: y0 + r*gapY, w: 26, h: 20, alive: true,
                   kind: (r + c) % 3, sprite: sprite, pt: 20 + n + (elite ? 15 : 0), f: 0,
                   hp: hp, maxhp: hp, hurt: 0, float: false };
@@ -1625,8 +1625,9 @@ function drawZako(e){
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('＋', e.x - 11, e.y - 11);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
-  if(e.maxhp > 1){   // 残り耐久ピップ
-    for(let i=0;i<e.hp;i++){ ctx.fillStyle = '#c0392b'; ctx.fillRect(e.x - 11 + i*4, e.y - 16, 2.5, 2.5); }
+  if(e.maxhp > 1){   // 残り耐久ピップ（最大6個まで表示）
+    const pips = Math.min(e.hp, 6);
+    for(let i=0;i<pips;i++){ ctx.fillStyle = '#c0392b'; ctx.fillRect(e.x - 11 + i*4, e.y - 16, 2.5, 2.5); }
   }
   if(tr === 2){     // 射撃特化＝赤い照準ドット
     ctx.fillStyle = 'rgba(255,82,82,' + (.5 + .4*Math.sin(frame/6)) + ')';
@@ -2185,7 +2186,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v44', s:24, gap:30},
+      {t:'書類インベーダー　v45', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2245,7 +2246,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v44", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v45", 5, 9);
   ctx.restore();
 }
 
