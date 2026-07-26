@@ -1868,6 +1868,31 @@ function drawStar(x, y, r){
     const px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr; i ? ctx.lineTo(px,py) : ctx.moveTo(px,py); }
   ctx.closePath(); ctx.fill();
 }
+// 税理士バッジ（金縁＋革の中央＋上部の花の徽章）を原点中心に半径Rで描く
+function drawBadge(R){
+  const PI2 = Math.PI*2;
+  // 金の外縁
+  const rim = ctx.createRadialGradient(-R*.3, -R*.3, R*.15, 0, 0, R);
+  rim.addColorStop(0, '#fdeaa6'); rim.addColorStop(.45, '#dcae4d');
+  rim.addColorStop(.8, '#a87f28'); rim.addColorStop(1, '#6f4f19');
+  ctx.fillStyle = rim; ctx.beginPath(); ctx.arc(0, 0, R, 0, PI2); ctx.fill();
+  // 内側リップのハイライト
+  ctx.strokeStyle = 'rgba(255,244,200,.75)'; ctx.lineWidth = Math.max(1, R*.07);
+  ctx.beginPath(); ctx.arc(0, 0, R*.82, 0, PI2); ctx.stroke();
+  // 革張りの中央
+  const cen = ctx.createRadialGradient(-R*.2, -R*.22, R*.08, 0, 0, R*.78);
+  cen.addColorStop(0, '#5c5854'); cen.addColorStop(1, '#37332f');
+  ctx.fillStyle = cen; ctx.beginPath(); ctx.arc(0, 0, R*.74, 0, PI2); ctx.fill();
+  // 上部の花の徽章（クリーム色のロゼット）
+  const fx = 0, fy = -R*.33, pr = R*.15;
+  ctx.fillStyle = '#efdaa0';
+  for(let i=0;i<9;i++){
+    const a = i/9*PI2, px = fx + Math.cos(a)*R*.20, py = fy + Math.sin(a)*R*.20;
+    ctx.beginPath(); ctx.ellipse(px, py, pr, pr*.72, a, 0, PI2); ctx.fill();
+  }
+  ctx.fillStyle = '#e4c886'; ctx.beginPath(); ctx.arc(fx, fy, R*.16, 0, PI2); ctx.fill();
+  ctx.fillStyle = '#f6e9c0'; ctx.beginPath(); ctx.arc(fx - R*.04, fy - R*.04, R*.07, 0, PI2); ctx.fill();
+}
 function drawAlly(){
   if(ally <= 0) return;
   const offs = allyOffsets();
@@ -2203,6 +2228,12 @@ function drawItem(it){
       drawStar(Math.cos(a)*rd, Math.sin(a)*rd, 2.6);
     }
   }
+  if(rare){   // 税理士＝バッジそのものをアイテムに
+    ctx.rotate(Math.sin(it.t/40)*.10);
+    drawBadge(r*1.35);
+    ctx.restore();
+    return;
+  }
   ctx.rotate(Math.sin(it.t/40)*.15);
   ctx.globalAlpha = .18 + .12*Math.sin(it.t/8);
   ctx.fillStyle = d.col;
@@ -2214,13 +2245,8 @@ function drawItem(it){
   ctx.strokeRect(-r, -r, r*2, r*2);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = '12px "Yu Mincho",serif';
-  if(rare){   // 税理士の「税」は虹色（時間で流れる）
-    ctx.fillStyle = rainbowGrad(-r, r, it.t);
-    ctx.fillText(d.label, 0, 1);
-  } else {
-    ctx.fillStyle = d.col;
-    ctx.fillText(d.label, 0, 1);
-  }
+  ctx.fillStyle = d.col;
+  ctx.fillText(d.label, 0, 1);
   if(d.k === 'heal'){   // 回復薬は右上に小さな十字（回復の記号）
     ctx.fillStyle = '#3aa76d';
     ctx.fillRect(r-5, -r+1, 4, 1.4); ctx.fillRect(r-4.3, -r+.3, 1.4, 4);
@@ -2244,8 +2270,13 @@ function drawChips(){
     ctx.strokeStyle = o.d.col; ctx.lineWidth = 1; ctx.strokeRect(x+.5, y+.5, 35, 13);
     ctx.font = '9px "Yu Mincho",serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = o.d.k === 'ally' ? rainbowGrad(x+2, x+34, frame) : o.d.col;   // 税理士の「税」は虹色
-    ctx.fillText(o.d.label + (o.tag ? o.tag : (o.n ? o.n + '発' : (o.d.k === 'shield' ? '1枚' : ''))), x+4, y+7);
+    if(o.d.k === 'ally'){   // 税理士＝ミニバッジ＋体数
+      ctx.save(); ctx.translate(x+7, y+7); drawBadge(5); ctx.restore();
+      ctx.fillStyle = '#ffd23f'; ctx.fillText(o.tag || '', x+14, y+7);
+    } else {
+      ctx.fillStyle = o.d.col;
+      ctx.fillText(o.d.label + (o.tag ? o.tag : (o.n ? o.n + '発' : (o.d.k === 'shield' ? '1枚' : ''))), x+4, y+7);
+    }
     ctx.fillStyle = o.d.col;
     ctx.fillRect(x, y+13, 36*o.t, 1.5);
   });
@@ -2547,7 +2578,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v70', s:24, gap:30},
+      {t:'書類インベーダー　v71', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2607,7 +2638,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v70", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v71", 5, 9);
   ctx.restore();
 }
 
