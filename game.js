@@ -78,6 +78,8 @@ chosa.src = "assets/chosa.png";
 let state = 'title';       // title | play | over | win | uraAsk
 let wave = 1, score = 0, lives = 3;
 let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑魚のみ・面ごとに難化）
+let best = { score: 0, ura: 0 };                   // 自己ベスト（localStorage）
+let combo = 0, comboT = 0, pops = [], scoreMul = 1;   // コンボ／スコアポップ／控除倍率
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
@@ -96,7 +98,10 @@ const ITEMS = [
   { k:'ink',    label:'朱', name:'朱肉',   col:'#c0392b' },
   { k:'shield', label:'受', name:'受理印', col:'#b8912f' },
   { k:'heal',   label:'薬', name:'回復薬', col:'#3aa76d' },   // ライフ回復（緑）
-  { k:'bunshin',label:'分', name:'分身',   col:'#5aa9e6' }    // 僚機（水色）
+  { k:'bunshin',label:'分', name:'分身',   col:'#5aa9e6' },   // 僚機（水色）
+  { k:'aoiro',  label:'青', name:'青色申告', col:'#4a90d9' },  // 受理印を最大2枚に強化
+  { k:'etax',   label:'e', name:'e-Tax',   col:'#39c8c0' },  // 超連射
+  { k:'kojo',   label:'控', name:'税額控除', col:'#e0b83a' }   // 一定時間スコア2倍
 ];
 const MAX_LIVES = 5, MAX_WINGS = 2;
 const STAGE_NAMES = ['', '領収書の山', '請求書の束', '帳簿の海', '年末調整', '確定申告'];
@@ -108,8 +113,8 @@ const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍
 
 function newPlayer(){
   return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
-           sub: 0, subT: 0, rapidT: 0, shield: false,
-           wings: 0, inkT: 0 };
+           sub: 0, subT: 0, rapidT: 0, shield: 0,
+           wings: 0, inkT: 0, etaxT: 0, kojoT: 0 };
 }
 
 function makeWave(n){
@@ -175,7 +180,7 @@ function startUra(){
   bgmSet('boss', true);
 }
 function uraAllClear(){
-  ura = false; allClear = true; score += 5000;
+  ura = false; allClear = true; score += 5000; saveBest();
   bgmStop(); state = 'win';
 }
 // 独立移動の敵（フロート）を更新
@@ -329,6 +334,11 @@ function makeBoss(type){
     bossObj = { type: 'chosa', x: W/2, y: 118, y0: 118, w: 124, h: 150, hp: hp, max: hp,
                 t: 0, cool: Math.max(26, 58 - uraStage), hurt: 0, next: hp - 12,
                 mslCool: Math.max(80, 145 - uraStage), spCool: 110 };
+  } else if(type === 'kokuzei'){
+    // 裏ラスボス：国税局長（裏100面の締め）。非常にタフで攻撃も激しい
+    const hp = 720;
+    bossObj = { type: 'kokuzei', x: W/2, y: 122, y0: 122, w: 152, h: 184, hp: hp, max: hp,
+                t: 0, cool: 24, hurt: 0, next: hp - 12, mslCool: 96, spCool: 80 };
   } else {
     // ラスボス（所長）：3段階。HPは倍設定（歯ごたえ重視）
     bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 140, max: 140,
@@ -370,6 +380,7 @@ function reset(){
   wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
   ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
+  combo = 0; comboT = 0; pops = []; scoreMul = 1;
   bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -377,6 +388,30 @@ function reset(){
 }
 
 function setMsg(t, f){ msg = t; msgTimer = f; }
+
+function addPop(x, y, txt, col){ pops.push({ x, y, txt, col, t: 0 }); }
+// 撃破スコア加算＋コンボ（控除で倍率、3コンボごとにボーナス）
+function award(pt, x, y){
+  combo++; comboT = 100;
+  const total = pt * scoreMul + Math.floor(combo/3) * 3;
+  score += total;
+  if(x !== undefined) addPop(x, y, '+' + total, combo >= 5 ? '#ffd23f' : '#d8b45c');
+  if(combo > 0 && combo % 10 === 0){ beep(180, .2, 'square', .06); addPop(W/2, H*0.42, combo + ' コンボ！', '#c0392b'); }
+}
+function loadBest(){
+  try{ const b = JSON.parse(localStorage.getItem('shorui_best') || '{}'); best.score = b.score || 0; best.ura = b.ura || 0; }catch(e){}
+}
+function saveBest(){
+  if(score > best.score) best.score = score;
+  if(uraStage > best.ura) best.ura = uraStage;
+  try{ localStorage.setItem('shorui_best', JSON.stringify(best)); }catch(e){}
+}
+function rankOf(s){
+  if(s >= 15000) return { r:'S', c:'#ffd23f', m:'優良申告！所長も脱帽です' };
+  if(s >= 8000)  return { r:'A', c:'#d8b45c', m:'期限内に完璧な申告' };
+  if(s >= 4000)  return { r:'B', c:'#a9c68c', m:'まずまずの申告です' };
+  return { r:'C', c:'#cfe0bd', m:'来年こそは早めの準備を' };
+}
 
 /* ---------- 音 ---------- */
 let ac = null, audioPrimed = false;
@@ -529,18 +564,19 @@ function shoot(){
   for(const wx of wingOffsets()){
     bullets.push({ x: player.x + wx, y: player.y - 8, w: 4, h: 10, vx: 0, dmg, ink });
   }
-  player.cool = player.rapidT > 0 ? 7 : 14;     // 速筆で連射
+  player.cool = player.etaxT > 0 ? 4 : (player.rapidT > 0 ? 7 : 14);   // e-Taxで超連射／速筆で連射
   beep(880, .06, 'square', .04);
 }
 
 /* ---------- パワーアップ ---------- */
 function maybeDrop(x, y, rate){
   if(Math.random() > (rate === undefined ? .14 : rate)) return;
-  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身
+  // ITEMS順：副印/速筆/朱肉/受理印/回復薬/分身/青色申告/e-Tax/税額控除
   // 回復薬は満タン時は出さない。分身は最大時は出さない。
-  const w = [17, 15, 14, 12,
-             lives < MAX_LIVES ? 9 : 0,
-             player.wings < MAX_WINGS ? 12 : 0];
+  const w = [15, 13, 12, 11,
+             lives < MAX_LIVES ? 8 : 0,
+             player.wings < MAX_WINGS ? 11 : 0,
+             10, 9, 9];
   const total = w.reduce((a, b) => a + b, 0);
   let r = Math.random()*total, i = 0;
   while(r > w[i] && i < w.length-1){ r -= w[i]; i++; }
@@ -558,7 +594,10 @@ function pickUp(it){
     beep(700, .08, 'triangle', .05); beep(1050, .1, 'triangle', .04);
     return;
   }
-  else if(d.k === 'shield'){ player.shield = true; }
+  else if(d.k === 'shield'){ player.shield = Math.max(player.shield, 1); }
+  else if(d.k === 'aoiro'){ player.shield = Math.min(2, player.shield + 2); setMsg('青色申告　受理印' + player.shield + '枚', 28); }
+  else if(d.k === 'etax'){ player.etaxT = 600; setMsg('e-Tax　超連射', 26); }
+  else if(d.k === 'kojo'){ player.kojoT = 600; setMsg('税額控除　スコア2倍', 26); }
   else if(d.k === 'heal'){
     if(lives < MAX_LIVES){ lives++; setMsg('回復薬　ライフ＋1', 30); }
     else { score += 200; setMsg('回復薬　満タン（＋200）', 30); }
@@ -584,6 +623,8 @@ function updateItems(){
   if(player.subT > 0 && --player.subT === 0) player.sub = 0;
   if(player.rapidT > 0) player.rapidT--;
   if(player.inkT > 0) player.inkT--;
+  if(player.etaxT > 0) player.etaxT--;
+  if(player.kojoT > 0) player.kojoT--;
 }
 
 /* ---------- 必殺・朱印一閃 ---------- */
@@ -608,7 +649,7 @@ function updateBeam(){
       bossObj.hurt = 4;
       if(bossObj.hp <= 0 && state === 'play'){
         if(bossObj.type === 'mid') midDefeated();
-        else if(bossObj.type === 'kousai' || bossObj.type === 'chosa') uraBossDefeated();
+        else if(bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei') uraBossDefeated();
         else bossDown();
       }
     }
@@ -654,6 +695,11 @@ function update(){
   }
   if(beam) updateBeam();
   updateItems();
+  // コンボ・スコアポップ・控除倍率
+  if(comboT > 0){ comboT--; if(comboT === 0) combo = 0; }
+  scoreMul = player.kojoT > 0 ? 2 : 1;
+  for(const p of pops){ p.t++; p.y -= 0.6; }
+  pops = pops.filter(p => p.t < 46);
 
   // 自機（貯め中は足が止まり気味、通常弾も出ない）
   const mv = charge > 0 ? .5 : 1;
@@ -698,8 +744,8 @@ function update(){
   for(const b of ebullets){
     if(player.inv <= 0 && Math.abs(b.x - player.x) < 14 && Math.abs(b.y - player.y) < 12){
       b.dead = true;
-      if(player.shield){
-        player.shield = false; player.inv = 60; shake = 8;
+      if(player.shield > 0){
+        player.shield--; player.inv = 60; shake = 8;
         setMsg('受理印が受け止めた', 26); beep(300,.18,'triangle',.05);
       } else {
         lives--; player.inv = 90; shake = 14; beep(120,.3,'sawtooth',.07);
@@ -716,6 +762,12 @@ function updateSwarm(){
     if(ura){                                   // 裏面：全100面。クリアで次面へ
       if(uraStage >= 100){ uraAllClear(); return; }
       uraStage++;
+      if(uraStage === 100){                     // 裏ラスボス：国税局長
+        makeBoss('kokuzei'); player.inv = 60;
+        setMsg('裏ラスボス　国税局長 参上', 140);
+        beep(160, .6, 'sawtooth', .07); beep(90, .7, 'square', .05);
+        return;
+      }
       if(uraStage % 10 === 0){                  // 10面ごとに裏中ボス（女将⇄調査官で交互）
         const kousaiTurn = ((uraStage / 10) % 2 === 1);   // 裏10=女将 裏20=調査官 裏30=女将…
         makeBoss(kousaiTurn ? 'kousai' : 'chosa'); player.inv = 60;
@@ -774,7 +826,7 @@ function updateSwarm(){
         b.dead = true;
         e.hp -= (b.dmg || 1);
         if(e.hp <= 0){                              // 撃破
-          e.alive = false; score += e.pt;
+          e.alive = false; award(e.pt, e.x, e.y);
           ki = Math.min(100, ki + 6); maybeDrop(e.x, e.y);
           beep(520, .07, 'square', .04);
         } else {                                    // 固い敵：ヒットしたが未撃破
@@ -798,7 +850,7 @@ function updateSwarm(){
 
 function updateBoss(){
   const b = bossObj;
-  if(b.type === 'mid' || b.type === 'kousai' || b.type === 'chosa'){ updateMidBoss(b); return; }
+  if(b.type === 'mid' || b.type === 'kousai' || b.type === 'chosa' || b.type === 'kokuzei'){ updateMidBoss(b); return; }
   const p3 = b.phase === 3;
   b.t += p3 ? 2 : 1;                       // 第三形態は動きも約2倍速
   b.x = W/2 + Math.sin(b.t/60) * (W/2 - 60);
@@ -892,7 +944,7 @@ function updateMidBoss(b){
     beep(520, .12, 'square', .04);
   }
   // ボス固有武器
-  if(b.type === 'kousai' || b.type === 'chosa'){
+  if(b.type === 'kousai' || b.type === 'chosa' || b.type === 'kokuzei'){
     b.spCool--;
     if(b.spCool <= 0){
       const rage = b.hp < b.max/2;
@@ -907,9 +959,10 @@ function updateMidBoss(b){
         }
         beep(880, .1, 'sine', .05); beep(1180, .08, 'sine', .04);
       } else {
-        // 追徴スタンプ：認印「追」を投げつける（重く速い）
-        b.spCool = rage ? 95 : 140;
-        const n = rage ? 4 : 3, sp = 2.7;
+        // 追徴スタンプ：認印「追」を投げつける（重く速い／国税局長は多め）
+        const big = b.type === 'kokuzei';
+        b.spCool = big ? (rage ? 60 : 90) : (rage ? 95 : 140);
+        const n = big ? (rage ? 6 : 5) : (rage ? 4 : 3), sp = big ? 3.0 : 2.7;
         for(let i=0;i<n;i++){
           const a = aim + (i-(n-1)/2)*.20;
           ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, kind: 3 });
@@ -995,6 +1048,7 @@ function drawIntro(){
 /* ---------- ゲームオーバー演出（自機爆散→「却下」朱印） ---------- */
 function gameOver(){
   if(overT > 0 || state !== 'play') return;
+  saveBest();
   overMax = overT = 120;
   deadX = player.x; deadY = player.y;
   ebullets = []; missiles = []; charge = 0; beam = null;   // 進行を止めて見せ場に
@@ -1046,7 +1100,7 @@ function drawGameOver(){
 const WIN_HIT = 96;   // 「しっかり納税」が出るタイミング（もったいぶり）
 function startWinSeq(){
   winMax = winT = 195;
-  score += 1000;
+  score += 1000; saveBest();
   ebullets = []; missiles = []; bullets = []; charge = 0; beam = null;
   flash = 12; shake = 22;
   beep(880, .5, 'triangle', .06); beep(1320, .5, 'triangle', .05);
@@ -1170,8 +1224,8 @@ function updateNoseBeam(b, noseX, noseY){
     if(b.beamT <= 0){ b.beamState = 'fire'; b.beamT = 36; shake = 12; beep(90, .5, 'sawtooth', .07); }
   } else if(b.beamState === 'fire'){
     if(player.inv <= 0 && Math.abs(player.x - b.beamX) < 13 && player.y > noseY){
-      if(player.shield){
-        player.shield = false; player.inv = 60; shake = 8;
+      if(player.shield > 0){
+        player.shield--; player.inv = 60; shake = 8;
         setMsg('受理印が受け止めた', 26); beep(300, .18, 'triangle', .05);
       } else {
         lives--; player.inv = 90; shake = 16; beep(120, .3, 'sawtooth', .07);
@@ -1231,8 +1285,8 @@ function updateMissiles(){
     // 自機に被弾
     if(player.inv <= 0 && Math.abs(m.x - player.x) < 14 && Math.abs(m.y - player.y) < 13){
       m.dead = true;
-      if(player.shield){
-        player.shield = false; player.inv = 60; shake = 8;
+      if(player.shield > 0){
+        player.shield--; player.inv = 60; shake = 8;
         setMsg('受理印が受け止めた', 26); beep(300, .18, 'triangle', .05);
       } else {
         lives--; player.inv = 90; shake = 15; beep(120, .3, 'sawtooth', .07);
@@ -1244,7 +1298,7 @@ function updateMissiles(){
       for(const bl of bullets){
         if(!bl.dead && Math.abs(bl.x - m.x) < 9 && Math.abs(bl.y - m.y) < 10){
           bl.dead = true; m.hp--;
-          if(m.hp <= 0){ m.dead = true; score += 8; ki = Math.min(100, ki + 1); beep(560, .05, 'square', .03); }
+          if(m.hp <= 0){ m.dead = true; award(8, m.x, m.y); ki = Math.min(100, ki + 1); beep(560, .05, 'square', .03); }
           else { score += 3; m.hurt = 4; beep(400, .04, 'square', .03); }
           break;
         }
@@ -1381,6 +1435,7 @@ function drawKousaiBoss(b){
   ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
   ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
   ctx.textAlign = 'center'; ctx.fillText('裏中ボス　交際費の女将', W/2, by - 6);
+  drawBossSpeech(b, BOSS_LINES.kousai);
 }
 function drawChosaBoss(b){
   const x = b.x - b.w/2, y = b.y - b.h/2;
@@ -1398,12 +1453,32 @@ function drawChosaBoss(b){
   ctx.strokeRect(bx+.5, by+.5, bw-1, 7);
   ctx.fillStyle = '#d8b45c'; ctx.font = '9px system-ui,sans-serif';
   ctx.textAlign = 'center'; ctx.fillText('裏中ボス　税務調査官', W/2, by - 6);
+  drawBossSpeech(b, BOSS_LINES.chosa);
+}
+function drawKokuzeiBoss(b){
+  const x = b.x - b.w/2, y = b.y - b.h/2;
+  if(chosaReady){
+    if(b.hurt > 0) ctx.globalAlpha = .55;
+    ctx.drawImage(chosa, x, y, b.w, b.h);
+    ctx.globalAlpha = 1;
+  } else { ctx.fillStyle = '#1b2a4a'; ctx.fillRect(x, y, b.w, b.h); }
+  // 金の威圧オーラ
+  ctx.strokeStyle = 'rgba(216,180,92,' + (.5 + .3*Math.sin(frame/8)) + ')'; ctx.lineWidth = 3;
+  ctx.strokeRect(x-2, y-2, b.w+4, b.h+4);
+  const bw = 220, bx = (W-bw)/2, by = 26;
+  ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(bx, by, bw, 9);
+  ctx.fillStyle = '#d8b45c'; ctx.fillRect(bx, by, bw * b.hp/b.max, 9);
+  ctx.strokeStyle = 'rgba(237,228,211,.8)'; ctx.lineWidth = 1; ctx.strokeRect(bx+.5, by+.5, bw-1, 8);
+  ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 10px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.fillText('裏ラスボス　国税局長', W/2, by - 6);
+  drawBossSpeech(b, BOSS_LINES.kokuzei);
 }
 function drawBoss(){
   const b = bossObj;
   if(b.type === 'mid'){ drawMidBoss(b); return; }
   if(b.type === 'kousai'){ drawKousaiBoss(b); return; }
   if(b.type === 'chosa'){ drawChosaBoss(b); return; }
+  if(b.type === 'kokuzei'){ drawKokuzeiBoss(b); return; }
   const p2 = b.phase === 2, p3 = b.phase === 3;
   const img = p3 ? boss3 : (p2 ? boss2 : boss);
   const ready = p3 ? boss3Ready : (p2 ? boss2Ready : bossReady);
@@ -1546,8 +1621,10 @@ function drawChips(){
   if(player.sub > 0)     on.push({ d: ITEMS[0], t: player.subT/900,   n: 1 + player.sub*2 });
   if(player.rapidT > 0)  on.push({ d: ITEMS[1], t: player.rapidT/780 });
   if(player.inkT > 0)    on.push({ d: ITEMS[2], t: player.inkT/600 });
-  if(player.shield)      on.push({ d: ITEMS[3], t: 1 });
+  if(player.shield > 0)  on.push({ d: ITEMS[3], t: 1, tag: player.shield + '枚' });
   if(player.wings > 0)   on.push({ d: ITEMS[5], t: 1, tag: player.wings + '機' });
+  if(player.etaxT > 0)   on.push({ d: ITEMS[7], t: player.etaxT/600 });
+  if(player.kojoT > 0)   on.push({ d: ITEMS[8], t: player.kojoT/600 });
   on.forEach((o, i)=>{
     const x = 8 + i*40, y = H-80;   // 自機（最下段）と重ならないよう一段上へ
     ctx.fillStyle = 'rgba(14,23,48,.6)'; ctx.fillRect(x, y, 36, 14);
@@ -1577,7 +1654,7 @@ function drawHUD(){
   ctx.textAlign = 'left';  ctx.fillText('SCORE ' + score, 8, H-12);
   ctx.textAlign = 'right';
   ctx.fillText(bossObj
-    ? (bossObj.type === 'last' ? 'FINAL' : (bossObj.type === 'kousai' || bossObj.type === 'chosa') ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
+    ? (bossObj.type === 'last' ? 'FINAL' : (bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei') ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
     : (ura ? '裏 ' + uraStage + '/100' : 'STAGE ' + wave + '/5'), W-8, H-12);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#c0392b';
@@ -1621,6 +1698,30 @@ function drawChoiceBtn(r, label, col){
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(label, r.x + r.w/2, r.y + r.h/2);
 }
+function drawBestLine(){
+  ctx.fillStyle = '#d8b45c'; ctx.font = '11px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('自己ベスト ' + best.score + '点' + (best.ura > 0 ? '　／　裏' + best.ura + '面' : ''), W/2, H/2 + 92);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+// ボスの体力連動セリフ（吹き出しをボスの下に表示）
+function drawBossSpeech(b, phrases){
+  const k = b.hp / b.max, txt = k > 0.6 ? phrases[0] : k > 0.3 ? phrases[1] : phrases[2];
+  ctx.font = '9px "Yu Mincho",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(txt).width + 14, h = 16;
+  const bx = Math.max(4 + w/2, Math.min(W - 4 - w/2, b.x)), by = Math.min(H - 130, b.y + b.h/2 + 14);
+  ctx.fillStyle = 'rgba(255,255,255,.94)'; ctx.fillRect(bx - w/2, by - h/2, w, h);
+  ctx.beginPath(); ctx.moveTo(bx - 4, by - h/2); ctx.lineTo(bx + 4, by - h/2); ctx.lineTo(bx, by - h/2 - 6); ctx.fill();
+  ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.2; ctx.strokeRect(bx - w/2, by - h/2, w, h);
+  ctx.fillStyle = '#16233f'; ctx.fillText(txt, bx, by + 1);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+const BOSS_LINES = {
+  kousai:  ['その領収書、見せて？', '誰と行ったの？', '…お会計、高くつくわよ'],
+  chosa:   ['この経費、説明できますか？', '通帳も確認します', '追徴課税、確定です'],
+  kokuzei: ['国税を、なめるな。', '反面調査を開始する', '……見のがさん']
+};
 function center(lines){
   ctx.fillStyle = 'rgba(14,23,48,.82)';
   ctx.fillRect(0, H/2-100, W, 200);
@@ -1693,6 +1794,21 @@ function draw(){
     drawChips();
     drawHUD();
     drawPause();
+    // スコアポップ
+    pops.forEach(p=>{
+      ctx.globalAlpha = Math.max(0, 1 - p.t/46);
+      ctx.fillStyle = p.col; ctx.font = 'bold 12px "Yu Mincho",serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(p.txt, p.x, p.y); ctx.globalAlpha = 1;
+    });
+    // コンボ表示（ボス以外の上部中央）
+    if(combo >= 3 && !bossObj){
+      ctx.fillStyle = combo >= 10 ? '#ffd23f' : '#d8b45c';
+      ctx.font = 'bold 13px "Yu Mincho",serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(combo + ' コンボ', W/2, 16);
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     if(introT > 0) drawIntro();   // ラスボス登場演出（インクブリード）
     if(morphT > 0) drawMorph();   // 形態変化演出
     if(overT > 0) drawGameOver(); // ゲームオーバー演出
@@ -1719,26 +1835,34 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v34', s:24, gap:30},
+      {t:'書類インベーダー　v35', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
       {t:'全5面。2面で中ボス→ラスボス所長', s:11, c:'#d8b45c', gap:18},
-      {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:32},
+      {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:30},
       {t:'タップ / スペースで開始', s:12, f:'system-ui,sans-serif', c:'#ede4d3'}
     ]);
     drawSeal(W/2, 128, 40);
-  } else if(state === 'over'){
-    const L = [];
-    if(uraStage > 0){                              // 裏面での力尽き＝到達面を表示
-      L.push({t:'力尽きた…', s:20, gap:28});
-      L.push({t:'裏' + uraStage + '面まで到達', s:17, c:'#c0392b', gap:30});
-    } else {
-      L.push({t:'申告漏れ…書類に埋もれた', s:19, gap:32});
+    if(best.score > 0){
+      ctx.fillStyle = '#d8b45c'; ctx.font = '11px system-ui,sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('自己ベスト  ' + best.score + '点' + (best.ura > 0 ? '　／　裏' + best.ura + '面到達' : ''), W/2, H/2 + 88);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
-    L.push({t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32});
+  } else if(state === 'over'){
+    const L = [], rk = rankOf(score);
+    if(uraStage > 0){                              // 裏面での力尽き＝到達面を表示
+      L.push({t:'力尽きた…', s:19, gap:24});
+      L.push({t:'裏' + uraStage + '面まで到達', s:16, c:'#c0392b', gap:26});
+    } else {
+      L.push({t:'申告漏れ…書類に埋もれた', s:18, gap:26});
+    }
+    L.push({t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:22});
+    L.push({t: rk.m, s:11, c:'rgba(237,228,211,.85)', gap:26});
     L.push({t:'タップでもう一度', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'});
     center(L);
+    drawBestLine();
   } else if(state === 'uraAsk'){
     center([
       {t:'所長 撃破！', s:24, c:'#d8b45c', gap:28},
@@ -1749,22 +1873,26 @@ function draw(){
     drawChoiceBtn(YESBTN, 'YES 突入', '#c0392b');
     drawChoiceBtn(NOBTN,  'NO 終了',  '#5aa9e6');
   } else if(state === 'win'){
+    const rk = rankOf(score);
     center(allClear ? [
-      {t:'全100面 制覇！', s:23, c:'#d8b45c', gap:30},
-      {t:'あなたは伝説の税理士だ', s:13, gap:30},
-      {t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32},
+      {t:'全100面 制覇！', s:22, c:'#d8b45c', gap:28},
+      {t:'あなたは伝説の税理士だ', s:12, gap:26},
+      {t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:22},
+      {t: rk.m, s:11, c:'rgba(237,228,211,.85)', gap:26},
       {t:'タップで再挑戦', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
     ] : [
-      {t:'所長 撃破', s:24, c:'#d8b45c', gap:30},
-      {t:'期限内に申告完了しました', s:13, gap:30},
-      {t:'SCORE ' + score, s:16, f:'system-ui,sans-serif', c:'#d8b45c', gap:32},
+      {t:'所長 撃破', s:23, c:'#d8b45c', gap:28},
+      {t:'期限内に申告完了しました', s:12, gap:26},
+      {t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:22},
+      {t: rk.m, s:11, c:'rgba(237,228,211,.85)', gap:26},
       {t:'タップで再挑戦', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
     ]);
+    drawBestLine();
   }
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v34", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v35", 5, 9);
   ctx.restore();
 }
 
@@ -1774,4 +1902,5 @@ function loop(){
   requestAnimationFrame(loop);
 }
 resize(); player = newPlayer(); bullets = []; ebullets = []; enemies = [];
+loadBest();
 loop();
