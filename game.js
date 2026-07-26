@@ -422,7 +422,8 @@ function rankAttack(b){
   b.cool--;
   if(b.cool > 0) return;
   const p2 = b.phase2, sy = b.y + b.h/2 - 8, aimA = Math.atan2(player.y - sy, player.x - b.x);
-  const shoot = (a, spd, kind) => ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*spd/EBULLET_SPEED, vy: Math.sin(a)*spd/EBULLET_SPEED, kind: kind || 1 });
+  const BS = 1.65;   // ボス弾の速度倍率（速く）
+  const shoot = (a, spd, kind) => ebullets.push({ x: b.x, y: sy, vx: Math.cos(a)*spd*BS/EBULLET_SPEED, vy: Math.sin(a)*spd*BS/EBULLET_SPEED, kind: kind || 1 });
   const fan  = (n, spread, spd, kind) => { for(let i=0;i<n;i++) shoot(aimA + (i-(n-1)/2)*spread, spd, kind); };
   const ring = (n, spd, off, kind) => { for(let i=0;i<n;i++) shoot((off||0) + i/n*6.283, spd, kind); };
   const seals = (n, spread, spd) => fan(n, spread, spd, 3);
@@ -2190,7 +2191,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v47', s:24, gap:30},
+      {t:'書類インベーダー　v48', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2250,7 +2251,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v47", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v48", 5, 9);
   ctx.restore();
 }
 
