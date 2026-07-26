@@ -68,6 +68,7 @@ let wave = 1, score = 0, lives = 3;
 let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑魚のみ・面ごとに難化）
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
+let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
 let midDone = false;   // 中ボスを倒したか
 let introT = 0, introMax = 0, introBlots = [];   // ラスボス登場演出
 let morphT = 0, morphMax = 0, morphBlots = [], morphCol = '#c0392b', morphInk = '#4e0a0c';   // 形態変化演出
@@ -112,6 +113,8 @@ function makeWave(n){
       });
     }
   }
+  // 第三・四面は防壁（書類の壁）を配置
+  if(n === 3 || n === 4) buildBarriers(3, 1); else barriers = [];
   dir = 1; stepTimer = 0;
 }
 
@@ -141,6 +144,9 @@ function makeUraWave(n){
       enemies.push(e);
     }
   }
+  // 裏面は3面ごとに防壁を配置。面が進むと硬く・数も増える
+  if(n % 3 === 2) buildBarriers(Math.min(4, 3 + Math.floor(n/50)), 1 + Math.floor(n/40));
+  else barriers = [];
   dir = 1; stepTimer = 0;
 }
 function startUra(){
@@ -197,6 +203,45 @@ function enemyFire(live){
     beep(200, .08, 'sawtooth', .04);
   }
 }
+/* ---------- 防壁（積み上げた書類の壁）：ステージによって出現 ---------- */
+// 小さなセルの集合。自弾・敵弾で1マスずつ崩れ、敵が触れても削れる。
+function buildBarriers(count, cellHp){
+  barriers = [];
+  const cs = 7, cols = 6, rows = 4, bw = cols*cs;
+  const y0 = H - 152;
+  const margin = (W - count*bw) / (count + 1);
+  for(let k=0;k<count;k++){
+    const x0 = margin + k*(bw + margin);
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        if(r >= rows-1 && (c === 2 || c === 3)) continue;   // 下中央にアーチの切り欠き
+        barriers.push({ x: x0 + c*cs + cs/2, y: y0 + r*cs + cs/2, s: cs,
+                        hp: cellHp, max: cellHp, alive: true });
+      }
+    }
+  }
+}
+// 弾が防壁に当たったら1マス削る（当たれば true）
+function hitBarrier(x, y, r){
+  for(const c of barriers){
+    if(!c.alive) continue;
+    if(Math.abs(x - c.x) < c.s/2 + r && Math.abs(y - c.y) < c.s/2 + r){
+      c.hp--; if(c.hp <= 0) c.alive = false;
+      return true;
+    }
+  }
+  return false;
+}
+function drawBarriers(){
+  for(const c of barriers){
+    if(!c.alive) continue;
+    ctx.fillStyle = (c.max > 1 && c.hp < c.max) ? '#8a6a1f' : '#cbb26a';
+    ctx.fillRect(c.x - c.s/2, c.y - c.s/2, c.s, c.s);
+    ctx.strokeStyle = 'rgba(122,86,14,.8)'; ctx.lineWidth = .5;
+    ctx.strokeRect(c.x - c.s/2 + .25, c.y - c.s/2 + .25, c.s - .5, c.s - .5);
+  }
+}
+
 function inRect(p, r){ return p.x > r.x && p.x < r.x+r.w && p.y > r.y && p.y < r.y+r.h; }
 const YESBTN = { x: W/2-92, y: H/2+50, w: 82, h: 34 };
 const NOBTN  = { x: W/2+10, y: H/2+50, w: 82, h: 34 };
@@ -206,6 +251,7 @@ function handleUraAsk(p){
 }
 
 function makeBoss(type){
+  barriers = [];   // ボス戦では防壁なし
   if(type === 'mid'){
     // 中ボス：単形態。復活なし、鼻ビームなし
     bossObj = { type: 'mid', x: W/2, y: 96, w: 96, h: 73, hp: 50, max: 50,
@@ -485,6 +531,7 @@ function updateBeam(){
   }
   ebullets = ebullets.filter(bl => Math.abs(bl.x - b.x) > half);
   missiles = missiles.filter(m => Math.abs(m.x - b.x) > half);   // 必殺はミサイルも消す
+  for(const c of barriers){ if(c.alive && Math.abs(c.x - b.x) < half + c.s/2) c.alive = false; }   // 防壁も貫く
   if(b.life <= 0) beam = null;
 }
 
@@ -539,6 +586,14 @@ function update(){
   ebullets.forEach(b => { b.y += b.vy * EBULLET_SPEED; b.x += (b.vx || 0) * EBULLET_SPEED; });
   ebullets = ebullets.filter(b => b.y < H+10 && b.x > -10 && b.x < W+10);
 
+  // 防壁との当たり（自弾・敵弾は防壁を削って消える）
+  if(barriers.length){
+    for(const b of bullets){ if(!b.dead && hitBarrier(b.x, b.y, 2)) b.dead = true; }
+    bullets = bullets.filter(b => !b.dead);
+    for(const b of ebullets){ if(!b.dead && hitBarrier(b.x, b.y, 3)) b.dead = true; }
+    ebullets = ebullets.filter(b => !b.dead);
+  }
+
   if(bossObj) updateBoss(); else updateSwarm();
   if(missiles.length) updateMissiles();
 
@@ -564,7 +619,7 @@ function updateSwarm(){
     if(ura){                                   // 裏面：全100面。クリアで次面へ
       if(uraStage >= 100){ uraAllClear(); return; }
       uraStage++; makeUraWave(uraStage); player.inv = 60;
-      setMsg('裏' + uraStage + '面', 80);
+      setMsg('裏' + uraStage + '面' + (barriers.length ? '　防壁あり' : ''), 80);
       return;
     }
     // 進行：1面→2面→中ボス→3面→4面→5面→ラスボス
@@ -577,7 +632,7 @@ function updateSwarm(){
     }
     wave++; makeWave(wave); player.inv = 60;
     const kanji = ['', '一', '二', '三', '四', '五'][wave] || wave;
-    setMsg('第' + kanji + '面　' + (STAGE_NAMES[wave] || ''), 90);
+    setMsg('第' + kanji + '面　' + (STAGE_NAMES[wave] || '') + (barriers.length ? '　防壁あり' : ''), 90);
     return;
   }
 
@@ -622,6 +677,14 @@ function updateSwarm(){
           beep(360, .04, 'square', .03);
         }
         break;
+      }
+    }
+  }
+  // 敵が防壁に触れたら削る
+  if(barriers.length){
+    for(const e of live){
+      for(const c of barriers){
+        if(c.alive && Math.abs(e.x - c.x) < e.w/2 && Math.abs(e.y - c.y) < e.h/2) c.alive = false;
       }
     }
   }
@@ -1389,6 +1452,7 @@ function draw(){
   if(state === 'play'){
     if(bossObj) drawBoss();
     else enemies.filter(e=>e.alive).forEach(drawDoc);
+    if(barriers.length) drawBarriers();
 
     bullets.forEach(b => {
       if(b.ink){ ctx.fillStyle = '#ffb020'; ctx.fillRect(b.x-3, b.y-7, 6, 14); }   // 強化弾（橙金）
@@ -1440,7 +1504,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v24', s:24, gap:30},
+      {t:'書類インベーダー　v25', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -1485,7 +1549,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('v24', 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v25", 5, 9);
   ctx.restore();
 }
 
