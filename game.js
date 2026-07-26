@@ -2386,10 +2386,34 @@ function center(lines){
   }
 }
 
+// 第三形態（かんた）専用の背景＝情熱の夕暮れ＋集中線
+function drawKantaBG(){
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#4a1435'); g.addColorStop(.5, '#2a0d28'); g.addColorStop(1, '#160611');
+  ctx.fillStyle = g; ctx.fillRect(-20, -20, W+40, H+40);
+  // 上部（かんたの背後）の後光
+  const cx = W/2, cy = 92;
+  const rg = ctx.createRadialGradient(cx, cy, 10, cx, cy, 280);
+  rg.addColorStop(0, 'rgba(255,120,90,' + (.22 + .06*Math.sin(frame/22)) + ')');
+  rg.addColorStop(1, 'rgba(255,120,90,0)');
+  ctx.fillStyle = rg; ctx.fillRect(-20, -20, W+40, H+40);
+  // ゆっくり回る集中線（漫画的な気迫）
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(frame/260);
+  ctx.fillStyle = 'rgba(255,205,130,.05)';
+  const N = 22;
+  for(let i=0;i<N;i++){
+    ctx.rotate(Math.PI*2/N);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(760, 16); ctx.lineTo(760, -16); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
 function draw(){
   ctx.save();
   if(shake > 0) ctx.translate((Math.random()-.5)*shake*.5, (Math.random()-.5)*shake*.5);
-  ctx.fillStyle = bgPat; ctx.fillRect(-20, -20, W+40, H+40);
+  const kantaBG = bossObj && bossObj.type === 'last' && bossObj.phase === 3;
+  if(kantaBG) drawKantaBG();
+  else { ctx.fillStyle = bgPat; ctx.fillRect(-20, -20, W+40, H+40); }
 
   if(state === 'play'){
     if(!bossObj) drawBgPhrase();   // 税務ワードの背景表示（ボス戦以外）
@@ -2523,7 +2547,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v68', s:24, gap:30},
+      {t:'書類インベーダー　v69', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2583,7 +2607,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v68", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v69", 5, 9);
   ctx.restore();
 }
 
