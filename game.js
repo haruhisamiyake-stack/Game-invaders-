@@ -123,6 +123,7 @@ let corpT = 0;                                     // 法人化バナー演出�
 let bigT = 0, bigMax = 0, bigTxt = '';             // 大見得テキスト（ボスの決めゼリフ）
 function bigMsg(txt, t){ bigTxt = txt; bigT = bigMax = t; }
 let kcutT = 0, kcutMax = 0;                         // かんた登場カットイン
+let recoverT = 0, recoverMax = 0, pendingBoss = null;   // ボス前のアイテム回収タイム
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let minions = [];    // 表ラスボス第三形態の応援＝小型所長×2
@@ -689,6 +690,7 @@ function reset(){
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
   mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; bigT = 0; kcutT = 0; cutinT = 0;
+  recoverT = 0; pendingBoss = null;
   bgPhraseT = 0; bgPhrase = WALL_PHRASES[Math.floor(Math.random()*WALL_PHRASES.length)];
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -964,7 +966,7 @@ function pickUp(it){
 function updateItems(){
   for(const it of items){
     it.t++;
-    it.y += 1.25;
+    if(recoverT <= 0) it.y += 1.25;   // 回収タイム中は落下を止めてその場で待つ
     it.x += Math.sin(it.t/22) * .6;
     if(Math.abs(it.x - player.x) < 20 && Math.abs(it.y - player.y) < 18){ it.got = true; pickUp(it); }
   }
@@ -1115,6 +1117,25 @@ function update(){
   ebullets = ebullets.filter(b => !b.dead);
 }
 
+// アイテム回収タイム開始（ボス出現を保留）
+function startRecover(which){
+  recoverMax = recoverT = 240;   // 約4秒の猶予
+  pendingBoss = which;
+  setMsg('アイテム回収！　残りを拾ってボスへ', 100);
+  beep(880, .08, 'sine', .05); beep(1174, .08, 'sine', .04);
+}
+// 表のボスを出現させる（回収タイム後に呼ばれる）
+function spawnFrontBoss(which){
+  if(which === 'mid'){
+    makeBoss('kousai'); bossObj.front = true;   // 表の中ボス＝交際費の女将
+    bossObj.hp = bossObj.max = bossObj.hp * 5;  // 表の中ボスHP 5倍
+    bossObj.next = bossObj.max - 12;
+    setMsg('中ボス出現　交際費の女将', 120);
+    beep(200, .5, 'sawtooth', .06);   // 中ボスはBGMそのまま（通常曲を継続）
+  } else {
+    startBossIntro();   // ラスボス登場演出（インクブリード）
+  }
+}
 function updateSwarm(){
   const live = enemies.filter(e => e.alive);
   if(live.length === 0){
@@ -1133,16 +1154,23 @@ function updateSwarm(){
       setMsg('裏' + uraStage + '面' + (barriers.length ? '　防壁あり' : ''), 80);
       return;
     }
+    // 回収タイム進行中：全アイテム回収 or 時間切れでボスへ
+    if(recoverT > 0){
+      recoverT--;
+      if(recoverT <= 0 || items.length === 0){
+        const pend = pendingBoss; pendingBoss = null; recoverT = 0;
+        spawnFrontBoss(pend);
+      }
+      return;
+    }
     // 進行：全10面。5面で中ボス（交際費の女将）、10面でラスボス
     if(wave === 5 && !midDone){
-      makeBoss('kousai'); bossObj.front = true;   // 表の中ボス＝交際費の女将
-      bossObj.hp = bossObj.max = bossObj.hp * 5;  // 表の中ボスHP 5倍
-      bossObj.next = bossObj.max - 12;
-      setMsg('中ボス出現　交際費の女将', 120);
-      beep(200,.5,'sawtooth',.06); return;   // 中ボスはBGMそのまま（通常曲を継続）
+      if(items.length){ startRecover('mid'); return; }   // 残りアイテムを拾ってから中ボスへ
+      spawnFrontBoss('mid'); return;
     }
     if(wave >= 10){
-      startBossIntro(); return;   // ラスボス登場演出（インクブリード）
+      if(items.length){ startRecover('last'); return; }  // 残りアイテムを拾ってからラスボスへ
+      spawnFrontBoss('last'); return;
     }
     wave++; makeWave(wave); player.inv = 60;
     const kanji = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][wave] || wave;
@@ -2257,6 +2285,24 @@ function drawItem(it){
   ctx.restore();
 }
 
+// アイテム回収タイムの表示（残り時間＋残数ゲージ）
+function drawRecover(){
+  if(recoverT <= 0) return;
+  const cy = 46;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const pulse = .7 + .3*Math.sin(frame/5);
+  ctx.fillStyle = 'rgba(255,210,63,' + pulse + ')'; ctx.font = 'bold 16px "Yu Mincho",serif';
+  ctx.fillText('アイテム回収！', W/2, cy);
+  ctx.fillStyle = 'rgba(237,228,211,.9)'; ctx.font = '11px system-ui,sans-serif';
+  ctx.fillText('残り ' + Math.ceil(recoverT/60) + '秒　／　アイテム ' + items.length + ' 個', W/2, cy + 18);
+  // 残時間ゲージ
+  const gw = 160, gx = (W-gw)/2, gy = cy + 28;
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(gx, gy, gw, 4);
+  ctx.fillStyle = '#ffd23f'; ctx.fillRect(gx, gy, gw*recoverT/recoverMax, 4);
+  ctx.restore();
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
 function drawChips(){
   const on = [];
   if(player.sub > 0)     on.push({ d: ITEMS[0], t: player.subT/900,   n: 1 + player.sub*2 });
@@ -2552,6 +2598,7 @@ function draw(){
       ctx.fillText(combo + ' コンボ', W/2, 16);
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if(recoverT > 0) drawRecover();   // アイテム回収タイム
     if(corpT > 0) drawCorpBanner();   // 法人化バナー
     if(bigT > 0) drawBigMsg();        // ボスの決めゼリフ（大見得）
     if(kcutT > 0) drawKantaCutin();   // かんた登場カットイン
@@ -2582,7 +2629,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v72', s:24, gap:30},
+      {t:'書類インベーダー　v73', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2642,7 +2689,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v72", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v73", 5, 9);
   ctx.restore();
 }
 
