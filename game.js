@@ -1037,11 +1037,25 @@ function updateItems(){
 function release(){
   const p = charge; charge = 0;
   if(p < 20){ beep(140, .12, 'sine', .03); return; }   // 貯めが足りないと不発
-  const life = Math.round(22 + p * .22);
-  beam = { x: player.x, w: 26 + p * 1.25, power: p, life: life, maxlife: life, acc: 0 };
-  flash = 6; shake = Math.round(6 + p*.1);
-  beep(420, .35, 'sawtooth', .06); beep(150, .5, 'square', .04);
-  if(p >= 85) setMsg('必殺　一括計算', 34);
+  fireBeam(p, 1);   // 第一段（フル溜めなら二段目へ連発）
+}
+// 必殺ビーム発射（stage 1＝通常／stage 2＝真・一括計算）
+function fireBeam(p, stage){
+  const st2 = stage === 2;
+  const life = Math.round((22 + p * .22) * (st2 ? 1.15 : 1));
+  beam = { x: player.x, w: (26 + p * 1.25) * (st2 ? 1.7 : 1),
+           power: p * (st2 ? 1.6 : 1), life: life, maxlife: life, acc: 0,
+           stage: stage, second: (stage === 1 && p >= 85) };   // フル溜めで二段目を予約
+  flash = st2 ? 12 : 6; shake = Math.round((st2 ? 12 : 6) + p * .1);
+  if(st2){
+    ebullets = []; missiles = [];   // 二段目で敵弾・ミサイルを一掃
+    setMsg('真・一括計算　二段撃ち！', 44);
+    beep(300, .5, 'sawtooth', .07); beep(120, .6, 'square', .05); beep(660, .4, 'triangle', .05);
+  } else {
+    beep(420, .35, 'sawtooth', .06); beep(150, .5, 'square', .04);
+    if(p >= 85) setMsg('必殺　一括計算　溜め最大！', 34);
+    else if(p >= 45) setMsg('必殺　一括計算', 30);
+  }
 }
 
 function updateBeam(){
@@ -1070,7 +1084,10 @@ function updateBeam(){
   ebullets = ebullets.filter(bl => Math.abs(bl.x - b.x) > half);
   missiles = missiles.filter(m => Math.abs(m.x - b.x) > half);   // 必殺はミサイルも消す
   for(const c of barriers){ if(c.alive && Math.abs(c.x - b.x) < half + c.s/2) c.alive = false; }   // 防壁も貫く
-  if(b.life <= 0) beam = null;
+  if(b.life <= 0){
+    if(b.second) fireBeam(b.power, 2);   // 第一段のあと自動で第二段（真・一括計算）へ
+    else beam = null;
+  }
 }
 
 /* ---------- 更新 ---------- */
@@ -2233,16 +2250,23 @@ function drawNoseBeam(b){
 
 function drawBeam(){
   const b = beam, half = b.w/2, k = b.life / b.maxlife, bot = player.y - 10;
+  const st2 = b.stage === 2;
   ctx.save();
   ctx.globalAlpha = .2 + .6*k;
   const g = ctx.createLinearGradient(0, bot, 0, 0);
-  g.addColorStop(0, 'rgba(216,180,92,.95)');
-  g.addColorStop(.4, 'rgba(192,57,43,.85)');
-  g.addColorStop(1, 'rgba(216,180,92,.12)');
+  if(st2){   // 二段目＝真・一括計算（紅蓮の極太ビーム）
+    g.addColorStop(0, 'rgba(255,220,120,.98)');
+    g.addColorStop(.4, 'rgba(220,40,40,.92)');
+    g.addColorStop(1, 'rgba(255,120,60,.15)');
+  } else {
+    g.addColorStop(0, 'rgba(216,180,92,.95)');
+    g.addColorStop(.4, 'rgba(192,57,43,.85)');
+    g.addColorStop(1, 'rgba(216,180,92,.12)');
+  }
   ctx.fillStyle = g; ctx.fillRect(b.x-half, 0, b.w, bot);
-  ctx.globalAlpha = .8*k; ctx.strokeStyle = '#ede4d3'; ctx.lineWidth = 1.5;
+  ctx.globalAlpha = .8*k; ctx.strokeStyle = st2 ? '#fff2c0' : '#ede4d3'; ctx.lineWidth = st2 ? 2.5 : 1.5;
   ctx.strokeRect(b.x-half, 0, b.w, bot);
-  ctx.globalAlpha = k; ctx.strokeStyle = 'rgba(192,57,43,.95)'; ctx.lineWidth = 3;
+  ctx.globalAlpha = k; ctx.strokeStyle = st2 ? 'rgba(255,80,60,.95)' : 'rgba(192,57,43,.95)'; ctx.lineWidth = st2 ? 4 : 3;
   const t = 1 - k;
   for(let i=0;i<3;i++){
     const y = bot - ((t*1.5 + i*.34) % 1) * bot;
@@ -2735,9 +2759,9 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v78', s:24, gap:30},
+      {t:'書類インベーダー　v79', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
-      {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
+      {t:'必殺・一括計算　満タンまで溜めて二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
       {t:'全10面。5面で中ボス・女将→ラスボス所長', s:11, c:'#d8b45c', gap:18},
       {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:30}
@@ -2806,7 +2830,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v78", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v79", 5, 9);
   ctx.restore();
 }
 
