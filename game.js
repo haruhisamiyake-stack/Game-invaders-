@@ -133,6 +133,7 @@ let recoverT = 0, recoverMax = 0, pendingBoss = null;   // ボス前のアイテ
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let minions = [];    // 表ラスボス第三形態の応援＝小型所長×2
+let beams = [];      // 二段撃ちの追加ビーム（色とりどり・時間差）
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
 let bgPhrase = '', bgPhraseT = 0;   // 税務ワードの背景表示（ボス戦以外）
 let midDone = false;   // 中ボスを倒したか
@@ -738,7 +739,7 @@ function reset(){
   mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; bigT = 0; kcutT = 0; cutinT = 0;
   recoverT = 0; pendingBoss = null;
   bgPhraseT = 0; bgPhrase = pickPhrase();
-  player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; bossObj = null;
+  player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; beams = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
@@ -1058,6 +1059,7 @@ function fireBeam(p, stage){
     addBurst(player.x, player.y - 40, '#ff5252', 18);
     addBurst(player.x, 60, '#fff2c0', 20);
     beep(300, .5, 'sawtooth', .07); beep(120, .6, 'square', .05); beep(660, .4, 'triangle', .05); beep(990, .45, 'sine', .05);
+    spawnExtraBeams();   // 色とりどりの追加ビームを時間差で
   } else {
     beep(420, .35, 'sawtooth', .06); beep(150, .5, 'square', .04);
     if(p >= 100) setMsg('必殺　一括計算　溜め最大！', 34);
@@ -1074,11 +1076,7 @@ function updateBeam(){
       while(b.acc >= 1 && bossObj.hp > 0){ b.acc--; bossObj.hp--; score += 5; }
       if(bossObj.hp <= bossObj.next){ bossObj.next -= 60; maybeDrop(bossObj.x, bossObj.y + 30, 1); }
       bossObj.hurt = 4;
-      if(bossObj.hp <= 0 && state === 'play'){
-        if(bossObj.type === 'mid' || bossObj.front) midDefeated();
-        else if(bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') uraBossDefeated();
-        else bossDown();
-      }
+      if(bossObj.hp <= 0 && state === 'play') bossDefeatDispatch();
     }
   } else {
     for(const e of enemies){
@@ -1094,6 +1092,70 @@ function updateBeam(){
   if(b.life <= 0){
     if(b.second) fireBeam(b.power, 2);   // 第一段のあと自動で第二段（真・一括計算）へ
     else beam = null;
+  }
+}
+// ボス撃破の振り分け（本ビーム・追加ビーム共通）
+function bossDefeatDispatch(){
+  if(!bossObj) return;
+  if(bossObj.type === 'mid' || bossObj.front) midDefeated();
+  else if(bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') uraBossDefeated();
+  else bossDown();
+}
+// 二段撃ちの追加ビームを生成（色・太さ・角度・出現タイミングがバラバラ）
+function spawnExtraBeams(){
+  beams = [];
+  const cols = ['#ffd23f', '#ff5252', '#3fd0e6', '#7cb342', '#e07b2c', '#b06ff0'];
+  const N = 6;
+  for(let i=0;i<N;i++){
+    const x = W * (i + 0.5) / N + (Math.random()*24 - 12);
+    const life = 30 + Math.floor(Math.random()*22);
+    beams.push({ x: x, w: 20 + Math.random()*26, life: life, maxlife: life,
+                 col: cols[i % cols.length], delay: i * 5, style: i % 3,
+                 tilt: (Math.random()*0.5 - 0.25) });   // わずかに傾く
+  }
+}
+function updateExtraBeams(){
+  if(!beams.length) return;
+  for(const b of beams){
+    if(b.delay > 0){ b.delay--; if(b.delay === 0) beep(520 + b.w*4, .06, 'sawtooth', .04); continue; }
+    b.life--;
+    const half = b.w/2;
+    if(bossObj){
+      if(Math.abs(bossObj.x - b.x) < half + bossObj.w/2 - 10){
+        bossObj.hp -= 0.7; bossObj.hurt = 3; score += 2;
+        if(bossObj.hp <= bossObj.next){ bossObj.next -= 60; maybeDrop(bossObj.x, bossObj.y + 30, 1); }
+        if(bossObj.hp <= 0 && state === 'play'){ bossDefeatDispatch(); return; }
+      }
+    } else {
+      for(const e of enemies){
+        if(e.alive && Math.abs(e.x - b.x) < half + e.w/2){ e.alive = false; score += e.pt; ki = Math.min(100, ki + 2); maybeDrop(e.x, e.y, .05); }
+      }
+    }
+    ebullets = ebullets.filter(bl => Math.abs(bl.x - b.x) > half);
+    for(const c of barriers){ if(c.alive && Math.abs(c.x - b.x) < half + c.s/2) c.alive = false; }
+  }
+  beams = beams.filter(b => b.delay > 0 || b.life > 0);
+}
+function drawExtraBeams(){
+  if(!beams.length) return;
+  const bot = player.y - 6;
+  for(const b of beams){
+    if(b.delay > 0) continue;
+    const k = b.life / b.maxlife, half = b.w/2;
+    ctx.save();
+    ctx.translate(b.x, 0); ctx.transform(1, 0, b.tilt, 1, 0, 0);   // わずかな傾き
+    ctx.globalAlpha = .25 + .55*k;
+    const g = ctx.createLinearGradient(-half, 0, half, 0);
+    g.addColorStop(0, b.col + '00'); g.addColorStop(.5, b.col + 'e6'); g.addColorStop(1, b.col + '00');
+    ctx.fillStyle = g; ctx.fillRect(-half, 0, b.w, bot);
+    ctx.globalAlpha = .55*k; ctx.fillStyle = '#fff'; ctx.fillRect(-2.5, 0, 5, bot);   // 白芯
+    // スタイル差：帯 or 光輪
+    if(b.style === 1){
+      ctx.globalAlpha = .5*k; ctx.strokeStyle = b.col; ctx.lineWidth = 2;
+      const t = b.maxlife - b.life;
+      for(let i=0;i<5;i++){ const y = (bot - ((t*8 + i*bot/5) % bot)); ctx.beginPath(); ctx.moveTo(-half, y); ctx.lineTo(half, y); ctx.stroke(); }
+    }
+    ctx.restore();
   }
 }
 
@@ -1134,6 +1196,7 @@ function update(){
     release();
   }
   if(beam) updateBeam();
+  updateExtraBeams();
   updateItems();
   updateAlly();   // 相棒（士業連携）の援護
   // コンボ・スコアポップ・控除倍率
@@ -1642,7 +1705,7 @@ const WIN_HIT = 96;   // 「しっかり納税」が出るタイミング（も�
 function startWinSeq(){
   winMax = winT = 195;
   score += 1000; saveBest();
-  ebullets = []; missiles = []; minions = []; bullets = []; charge = 0; beam = null;
+  ebullets = []; missiles = []; minions = []; beams = []; bullets = []; charge = 0; beam = null;
   flash = 12; shake = 22;
   beep(880, .5, 'triangle', .06); beep(1320, .5, 'triangle', .05);
 }
@@ -2753,6 +2816,7 @@ function draw(){
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     drawMissiles();
     items.forEach(drawItem);
+    if(beams.length) drawExtraBeams();
     if(beam) drawBeam();
     drawPlayer();
     if(player.shield && !(player.inv > 0 && Math.floor(player.inv/5) % 2)){
@@ -2827,7 +2891,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v82', s:24, gap:30},
+      {t:'書類インベーダー　v83', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　ゲージ二周溜めで二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2898,7 +2962,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v82", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v83", 5, 9);
   ctx.restore();
 }
 
