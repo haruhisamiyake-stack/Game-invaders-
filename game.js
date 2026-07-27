@@ -158,7 +158,8 @@ let paused = false;
 const TBTN = {   // タイトルのモード選択ボタン
   rush: { x: W/2-116, y: H/2+108, w: 72, h: 26, label:'ボスラッシュ' },
   time: { x: W/2-36,  y: H/2+108, w: 72, h: 26, label:'タイムアタック' },
-  dex:  { x: W/2+44,  y: H/2+108, w: 72, h: 26, label:'図鑑' }
+  dex:  { x: W/2+44,  y: H/2+108, w: 72, h: 26, label:'ランク図鑑' },
+  item: { x: W/2-60,  y: H/2+140, w: 120, h: 26, label:'アイテム図鑑' }
 };
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
 
@@ -855,7 +856,7 @@ addEventListener('keydown', e=>{
   unlockAudio();
   if(e.code === 'KeyP' || e.code === 'Escape'){ togglePause(); e.preventDefault(); return; }
   if(paused) return;   // 停止中は他の入力を無視
-  if(state === 'dex'){ state = 'title'; return; }
+  if(state === 'dex' || state === 'itemhelp'){ state = 'title'; return; }
   if(state === 'title' && e.code === 'KeyG'){ state = 'dex'; return; }
   keys[e.code] = true;
   if(['ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
@@ -901,11 +902,12 @@ cv.addEventListener('pointerdown', e=>{
   if(inPause(p)){ togglePause(); return; }  // 一時停止／再開
   if(paused){ togglePause(); return; }      // 停止中は画面タップで再開
   if(state === 'uraAsk'){ handleUraAsk(p); return; }   // 裏面 突入 Yes/No
-  if(state === 'dex'){ state = 'title'; return; }
+  if(state === 'dex' || state === 'itemhelp'){ state = 'title'; return; }
   if(state === 'title'){
     if(inRect(p, TBTN.rush)){ startRush(); return; }
     if(inRect(p, TBTN.time)){ startTime(); return; }
     if(inRect(p, TBTN.dex)){ state = 'dex'; return; }
+    if(inRect(p, TBTN.item)){ state = 'itemhelp'; return; }
     reset(); return;                         // それ以外は通常開始
   }
   if(state !== 'play'){ tap(); return; }
@@ -2461,6 +2463,45 @@ function drawDex(){
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('タップ / キーで戻る', W/2, H - 6);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
+// アイテムの効果説明（ITEMS の並び順）
+const ITEM_HELP = [
+  '弾数アップ（3発→5発）／約15秒',
+  '連射速度アップ／約13秒',
+  '必殺ゲージ満タン＋強化弾（威力2）／約10秒',
+  'バリア1枚（被弾を1回防ぐ）',
+  'ライフ＋1（最大5・満タンで+200点）',
+  '僚機＋1（最大2機で一緒に発射）',
+  '超連射／約10秒',
+  'スコア2倍／約10秒',
+  'レア。敵弾を一掃＋強力援護。3体で法人化！'
+];
+function drawItemHelp(){
+  ctx.fillStyle = 'rgba(14,23,48,.96)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#d8b45c'; ctx.font = 'bold 15px "Yu Mincho",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText('アイテム図鑑', W/2, 10);
+  const top = 34, rowH = (H - 52 - top) / ITEMS.length;
+  ITEMS.forEach((d, i)=>{
+    const cy = top + i*rowH + rowH/2, ix = 26;
+    // アイコン
+    if(d.k === 'ally' && badgeReady){
+      ctx.drawImage(badgeImg, ix-11, cy-11, 22, 22);
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(ix-11, cy-11, 22, 22);
+      ctx.strokeStyle = d.col; ctx.lineWidth = 1.5; ctx.strokeRect(ix-10.5, cy-10.5, 21, 21);
+      ctx.fillStyle = d.col; ctx.font = '13px "Yu Mincho",serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.label, ix, cy+1);
+    }
+    // 名称＋効果
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = d.col; ctx.font = 'bold 13px "Yu Mincho",serif';
+    ctx.fillText(d.name, ix + 20, cy - 8);
+    ctx.fillStyle = 'rgba(237,228,211,.8)'; ctx.font = '10px system-ui,sans-serif';
+    ctx.fillText(ITEM_HELP[i] || '', ix + 20, cy + 9);
+  });
+  ctx.fillStyle = 'rgba(237,228,211,.8)'; ctx.font = '10px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('タップ / キーで戻る', W/2, H - 6);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
 function drawBestLine(){
   ctx.fillStyle = '#d8b45c'; ctx.font = '11px system-ui,sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -2660,7 +2701,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v75', s:24, gap:30},
+      {t:'書類インベーダー　v76', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2716,11 +2757,13 @@ function draw(){
     drawBestLine();
   } else if(state === 'dex'){
     drawDex();
+  } else if(state === 'itemhelp'){
+    drawItemHelp();
   }
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v75", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v76", 5, 9);
   ctx.restore();
 }
 
