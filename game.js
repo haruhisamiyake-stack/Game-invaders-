@@ -991,8 +991,14 @@ function pickUp(it){
 function updateItems(){
   for(const it of items){
     it.t++;
-    if(recoverT <= 0) it.y += 1.25;   // 回収タイム中は落下を止めてその場で待つ
-    it.x += Math.sin(it.t/22) * .6;
+    if(recoverT > 0){
+      // 回収タイム中は自機へ吸い寄せる（機体は左右のみなので上の弾も確実に回収）
+      it.x += (player.x - it.x) * .10;
+      it.y += (player.y - it.y) * .10;
+    } else {
+      it.y += 1.25;
+      it.x += Math.sin(it.t/22) * .6;
+    }
     if(Math.abs(it.x - player.x) < 20 && Math.abs(it.y - player.y) < 18){ it.got = true; pickUp(it); }
   }
   items = items.filter(it => !it.got && it.y < H - 6);
@@ -1146,7 +1152,7 @@ function update(){
 function startRecover(which){
   recoverMax = recoverT = 240;   // 約4秒の猶予
   pendingBoss = which;
-  setMsg('アイテム回収！　残りを拾ってボスへ', 100);
+  setMsg('アイテム回収！　自機に引き寄せ中', 100);
   beep(880, .08, 'sine', .05); beep(1174, .08, 'sine', .04);
 }
 // 表のボスを出現させる（回収タイム後に呼ばれる）
@@ -2654,7 +2660,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v74', s:24, gap:30},
+      {t:'書類インベーダー　v75', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2714,7 +2720,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v74", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v75", 5, 9);
   ctx.restore();
 }
 
