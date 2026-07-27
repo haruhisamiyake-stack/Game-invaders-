@@ -1905,7 +1905,7 @@ function updateMissiles(){
     // 自弾で撃墜（重装甲は2発必要）
     if(!m.dead){
       for(const bl of bullets){
-        if(!bl.dead && Math.abs(bl.x - m.x) < 9 && Math.abs(bl.y - m.y) < 10){
+        if(!bl.dead && Math.abs(bl.x - m.x) < 12 && Math.abs(bl.y - m.y) < 12){   // 見た目に判定を合わせ、すり抜け（貫通）を防ぐ
           bl.dead = true; m.hp--;
           if(m.hp <= 0){ m.dead = true; award(8, m.x, m.y); ki = Math.min(100, ki + 1); beep(560, .05, 'square', .03); }
           else { score += 3; m.hurt = 4; beep(400, .04, 'square', .03); }
@@ -1927,21 +1927,21 @@ function drawMissiles(){
   for(const m of missiles){
     const ang = Math.atan2(m.vy || 1, m.vx || 0);
     const big = m.kind === 'armored';
-    const bw = big ? 13 : 11, bh = big ? 8 : 6;
+    const bw = big ? 10 : 8, bh = big ? 6 : 5;   // 一回り小さく（後ろの敵が見えるように）
     let body = MSL_COL[m.kind] || '#c0392b';
     if(m.hurt > 0) body = '#ede4d3';   // 被弾フラッシュ（重装甲）
     ctx.save();
     ctx.translate(m.x, m.y); ctx.rotate(ang);
-    // 噴射炎
-    ctx.fillStyle = 'rgba(216,180,92,' + (.5 + .4*Math.abs(Math.sin(frame/3))) + ')';
-    ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(-12,-2.6); ctx.lineTo(-12,2.6); ctx.closePath(); ctx.fill();
+    // 噴射炎（控えめ・半透明で視界を邪魔しない）
+    ctx.fillStyle = 'rgba(216,180,92,' + (.32 + .28*Math.abs(Math.sin(frame/3))) + ')';
+    ctx.beginPath(); ctx.moveTo(-5,0); ctx.lineTo(-9,-1.8); ctx.lineTo(-9,1.8); ctx.closePath(); ctx.fill();
     // 弾体
-    ctx.fillStyle = body; ctx.fillRect(-6, -bh/2, bw, bh);
+    ctx.fillStyle = body; ctx.fillRect(-5, -bh/2, bw, bh);
     // 弾頭
     ctx.fillStyle = '#ede4d3';
-    ctx.beginPath(); ctx.moveTo(-6+bw, -bh/2); ctx.lineTo(-6+bw+5, 0); ctx.lineTo(-6+bw, bh/2); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-5+bw, -bh/2); ctx.lineTo(-5+bw+4, 0); ctx.lineTo(-5+bw, bh/2); ctx.closePath(); ctx.fill();
     if(big){   // 重装甲は装甲リベット
-      ctx.fillStyle = '#3a4250'; ctx.fillRect(-4, -bh/2+1, 2, bh-2); ctx.fillRect(0, -bh/2+1, 2, bh-2);
+      ctx.fillStyle = '#3a4250'; ctx.fillRect(-3, -bh/2+1, 1.5, bh-2); ctx.fillRect(0, -bh/2+1, 1.5, bh-2);
     }
     if(m.kind === 'splitter' && m.fuse < 22 && Math.floor(m.fuse/3) % 2){   // 分裂間近は点滅
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(1, 0, 2.4, 0, Math.PI*2); ctx.fill();
@@ -2893,7 +2893,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v84', s:24, gap:30},
+      {t:'書類インベーダー　v85', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　ゲージ二周溜めで二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2964,7 +2964,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v84", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v85", 5, 9);
   ctx.restore();
 }
 
