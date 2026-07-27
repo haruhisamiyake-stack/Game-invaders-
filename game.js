@@ -1047,11 +1047,15 @@ function fireBeam(p, stage){
   beam = { x: player.x, w: (26 + p * 1.25) * (st2 ? 1.7 : 1),
            power: p * (st2 ? 1.6 : 1), life: life, maxlife: life, acc: 0,
            stage: stage, second: (stage === 1 && p >= STAGE2_TH) };   // 溜め十分で二段目を予約
-  flash = st2 ? 12 : 6; shake = Math.round((st2 ? 12 : 6) + p * .1);
+  flash = st2 ? 18 : 6; shake = Math.round((st2 ? 20 : 6) + p * .1);
   if(st2){
     ebullets = []; missiles = [];   // 二段目で敵弾・ミサイルを一掃
-    setMsg('真・一括計算　二段撃ち！', 44);
-    beep(300, .5, 'sawtooth', .07); beep(120, .6, 'square', .05); beep(660, .4, 'triangle', .05);
+    setMsg('真・一括計算　二段撃ち！', 50);
+    // 派手な火花（自機まわり＋ビーム上）
+    addBurst(player.x, player.y - 40, '#ffd23f', 26);
+    addBurst(player.x, player.y - 40, '#ff5252', 18);
+    addBurst(player.x, 60, '#fff2c0', 20);
+    beep(300, .5, 'sawtooth', .07); beep(120, .6, 'square', .05); beep(660, .4, 'triangle', .05); beep(990, .45, 'sine', .05);
   } else {
     beep(420, .35, 'sawtooth', .06); beep(150, .5, 'square', .04);
     if(p >= STAGE2_TH) setMsg('必殺　一括計算　溜め最大！', 34);
@@ -1117,10 +1121,10 @@ function update(){
     charge = Math.min(100, charge + 1.7);
     ki = Math.max(0, ki - 1.15);
     if(before < STAGE2_TH && charge >= STAGE2_TH){   // 二段階に到達した瞬間の合図
-      beep(1200, .12, 'square', .06); beep(1650, .12, 'sine', .05); flash = Math.max(flash, 5);
+      beep(1200, .12, 'square', .06); beep(1650, .12, 'sine', .05); flash = Math.max(flash, 6);
     }
     if(frame % 5 === 0) beep(240 + charge*7, .05, 'triangle', .025);
-    if(ki <= 0) release();
+    // ki が尽きても自動発射しない：押している間は溜め続け／保持し、離した時に発射
   } else if(charge > 0){
     release();
   }
@@ -2255,28 +2259,58 @@ function drawNoseBeam(b){
 
 function drawBeam(){
   const b = beam, half = b.w/2, k = b.life / b.maxlife, bot = player.y - 10;
-  const st2 = b.stage === 2;
+  if(b.stage === 2){ drawBeamStage2(b, half, k, bot); return; }   // 二段目は別種のビーム
   ctx.save();
   ctx.globalAlpha = .2 + .6*k;
   const g = ctx.createLinearGradient(0, bot, 0, 0);
-  if(st2){   // 二段目＝真・一括計算（紅蓮の極太ビーム）
-    g.addColorStop(0, 'rgba(255,220,120,.98)');
-    g.addColorStop(.4, 'rgba(220,40,40,.92)');
-    g.addColorStop(1, 'rgba(255,120,60,.15)');
-  } else {
-    g.addColorStop(0, 'rgba(216,180,92,.95)');
-    g.addColorStop(.4, 'rgba(192,57,43,.85)');
-    g.addColorStop(1, 'rgba(216,180,92,.12)');
-  }
+  g.addColorStop(0, 'rgba(216,180,92,.95)');
+  g.addColorStop(.4, 'rgba(192,57,43,.85)');
+  g.addColorStop(1, 'rgba(216,180,92,.12)');
   ctx.fillStyle = g; ctx.fillRect(b.x-half, 0, b.w, bot);
-  ctx.globalAlpha = .8*k; ctx.strokeStyle = st2 ? '#fff2c0' : '#ede4d3'; ctx.lineWidth = st2 ? 2.5 : 1.5;
+  ctx.globalAlpha = .8*k; ctx.strokeStyle = '#ede4d3'; ctx.lineWidth = 1.5;
   ctx.strokeRect(b.x-half, 0, b.w, bot);
-  ctx.globalAlpha = k; ctx.strokeStyle = st2 ? 'rgba(255,80,60,.95)' : 'rgba(192,57,43,.95)'; ctx.lineWidth = st2 ? 4 : 3;
+  ctx.globalAlpha = k; ctx.strokeStyle = 'rgba(192,57,43,.95)'; ctx.lineWidth = 3;
   const t = 1 - k;
   for(let i=0;i<3;i++){
     const y = bot - ((t*1.5 + i*.34) % 1) * bot;
     ctx.beginPath(); ctx.arc(b.x, y, half*.8, 0, Math.PI*2); ctx.stroke();
   }
+  ctx.restore();
+}
+// 二段目＝真・一括計算：白熱の極太ビーム＋認印スタンプが降り注ぐ
+function drawBeamStage2(b, half, k, bot){
+  const t = b.maxlife - b.life;
+  ctx.save();
+  // 外側グロー（紅蓮・左右に減衰）
+  ctx.globalAlpha = .3 + .55*k;
+  let g = ctx.createLinearGradient(b.x-half, 0, b.x+half, 0);
+  g.addColorStop(0, 'rgba(220,40,40,0)'); g.addColorStop(.5, 'rgba(255,70,40,.92)'); g.addColorStop(1, 'rgba(220,40,40,0)');
+  ctx.fillStyle = g; ctx.fillRect(b.x-half, 0, b.w, bot);
+  // 白熱コア
+  ctx.globalAlpha = .55 + .45*k;
+  const hc = half*.55;
+  g = ctx.createLinearGradient(b.x-hc, 0, b.x+hc, 0);
+  g.addColorStop(0, 'rgba(255,230,150,0)'); g.addColorStop(.5, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,230,150,0)');
+  ctx.fillStyle = g; ctx.fillRect(b.x-hc, 0, hc*2, bot);
+  // 横方向のエネルギー帯（流れる）
+  ctx.globalAlpha = .5*k; ctx.strokeStyle = 'rgba(255,220,120,.8)'; ctx.lineWidth = 2;
+  for(let i=0;i<7;i++){
+    const y = (bot - ((t*7 + i*bot/7) % bot));
+    ctx.beginPath(); ctx.moveTo(b.x-half, y); ctx.lineTo(b.x+half, y); ctx.stroke();
+  }
+  // 認印スタンプが降り注ぐ
+  ctx.globalAlpha = k;
+  for(let i=0;i<5;i++){
+    const y = ((t*6 + i*bot/5) % bot), sx = b.x + (i%2 ? 1 : -1) * half*.4, s = 14;
+    ctx.save(); ctx.translate(sx, y); ctx.rotate(Math.sin(t/7 + i)*.25);
+    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2.5; ctx.strokeRect(-s/2, -s/2, s, s);
+    ctx.fillStyle = '#c0392b'; ctx.font = 'bold 12px "Yu Mincho",serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('認', 0, 1);
+    ctx.restore();
+  }
+  // 上端の拡散リング
+  ctx.globalAlpha = .6*k; ctx.strokeStyle = 'rgba(255,230,150,.9)'; ctx.lineWidth = 3;
+  for(let i=0;i<3;i++){ const rr = ((t*3 + i*22) % 66); ctx.beginPath(); ctx.arc(b.x, 16, rr, 0, Math.PI*2); ctx.stroke(); }
   ctx.restore();
 }
 
@@ -2783,7 +2817,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v80', s:24, gap:30},
+      {t:'書類インベーダー　v81', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　満タンまで溜めて二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2854,7 +2888,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v80", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v81", 5, 9);
   ctx.restore();
 }
 
