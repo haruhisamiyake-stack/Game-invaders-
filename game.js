@@ -191,7 +191,9 @@ function makeWave(n){
     for(let c=0;c<cols;c++){
       // 後列（r=0）は分厚い書類束＝複数ヒットで倒す固い敵（波が進むほど硬い）
       const tough = (r === 0);
-      const hp = (tough ? 1 + Math.min(2, n) : 1) * 2;   // 防御2倍（後列4〜6発／前列2発）
+      // 防御2倍。さらに中ボス撃破後（6面〜）はアイテムで火力過多になるため3倍に硬く
+      const midMul = midDone ? 3 : 1;
+      const hp = (tough ? 1 + Math.min(2, n) : 1) * 2 * midMul;
       enemies.push({
         x: x0 + c*gapX, y: y0 + r*gapY, w: 26, h: 20, alive: true,
         kind: r % 3, pt: (rows - r) * 10 + (tough ? 20 : 0), f: 0,
@@ -2891,7 +2893,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v83', s:24, gap:30},
+      {t:'書類インベーダー　v84', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　ゲージ二周溜めで二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2962,7 +2964,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v83", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v84", 5, 9);
   ctx.restore();
 }
 
