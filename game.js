@@ -117,6 +117,10 @@ let bursts = [];                                    // 撃破エフェクト（�
 let dex = {};                                      // 税務署ランク図鑑（解禁記録）
 let cutinT = 0, cutinMax = 0, cutinIdx = 0;        // 昇格カットイン演出
 let mode = 'normal';                               // normal | rush（ボスラッシュ） | time（タイムアタック）
+let diff = 'normal';                               // 難易度：easy | normal | hard
+const DIFF_FIRE = { easy: .6, normal: 1, hard: 1.5 };   // 敵の発射頻度倍率
+function loadDiff(){ try{ const d = localStorage.getItem('shorui_diff'); if(d === 'easy' || d === 'normal' || d === 'hard') diff = d; }catch(e){} }
+function setDifficulty(d){ diff = d; try{ localStorage.setItem('shorui_diff', d); }catch(e){} beep(760, .06, 'triangle', .04); }
 let taT = 0;                                       // タイムアタック残り（フレーム）
 let ally = 0, allyN = 0;                           // 税理士お助け：残り時間／体数（最大3）
 let corpT = 0;                                     // 法人化バナー演出タイマー
@@ -155,11 +159,16 @@ const BTN = { x: W-56, y: H-116, w: 48, h: 48 };
 const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
 const PAUSE = { x: W-58, y: 8, w: 22, h: 22 };   // 一時停止（ミュートの左隣）
 let paused = false;
+const DBTN = {   // 難易度選択ボタン
+  easy:   { x: W/2-115, y: H/2+72, w: 74, h: 26, label:'かんたん', key:'easy' },
+  normal: { x: W/2-37,  y: H/2+72, w: 74, h: 26, label:'普通',     key:'normal' },
+  hard:   { x: W/2+41,  y: H/2+72, w: 74, h: 26, label:'むずかしい', key:'hard' }
+};
 const TBTN = {   // タイトルのモード選択ボタン
-  rush: { x: W/2-116, y: H/2+108, w: 72, h: 26, label:'ボスラッシュ' },
-  time: { x: W/2-36,  y: H/2+108, w: 72, h: 26, label:'タイムアタック' },
-  dex:  { x: W/2+44,  y: H/2+108, w: 72, h: 26, label:'ランク図鑑' },
-  item: { x: W/2-60,  y: H/2+140, w: 120, h: 26, label:'アイテム図鑑' }
+  rush: { x: W/2-116, y: H/2+136, w: 72, h: 26, label:'ボスラッシュ' },
+  time: { x: W/2-36,  y: H/2+136, w: 72, h: 26, label:'タイムアタック' },
+  dex:  { x: W/2+44,  y: H/2+136, w: 72, h: 26, label:'ランク図鑑' },
+  item: { x: W/2-60,  y: H/2+168, w: 120, h: 26, label:'アイテム図鑑' }
 };
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
 
@@ -264,6 +273,7 @@ function enemyFire(live){
   } else {
     rate = .012 + wave*.006; bspd = 2.6 + wave*.2; aimCh = 0;
   }
+  rate *= DIFF_FIRE[diff] || 1;   // 難易度で敵の発射頻度を増減
   if(Math.random() < rate){
     const s = live[Math.floor(Math.random()*live.length)];
     if(ura && Math.random() < aimCh){                 // 自機を狙う
@@ -711,7 +721,7 @@ function bossDown(){
 }
 
 function reset(){
-  wave = 1; score = 0; lives = 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
+  wave = 1; score = 0; lives = diff === 'easy' ? 4 : 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
   ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
@@ -904,6 +914,9 @@ cv.addEventListener('pointerdown', e=>{
   if(state === 'uraAsk'){ handleUraAsk(p); return; }   // 裏面 突入 Yes/No
   if(state === 'dex' || state === 'itemhelp'){ state = 'title'; return; }
   if(state === 'title'){
+    if(inRect(p, DBTN.easy)){ setDifficulty('easy'); return; }     // 難易度選択（開始しない）
+    if(inRect(p, DBTN.normal)){ setDifficulty('normal'); return; }
+    if(inRect(p, DBTN.hard)){ setDifficulty('hard'); return; }
     if(inRect(p, TBTN.rush)){ startRush(); return; }
     if(inRect(p, TBTN.time)){ startTime(); return; }
     if(inRect(p, TBTN.dex)){ state = 'dex'; return; }
@@ -1197,12 +1210,13 @@ function updateSwarm(){
       return;
     }
     // 進行：全10面。5面で中ボス（交際費の女将）、10面でラスボス
+    // 回収タイム（全吸収）は「かんたん」のみ。普通/むずかしいは従来どおり取り逃す
     if(wave === 5 && !midDone){
-      if(items.length){ startRecover('mid'); return; }   // 残りアイテムを拾ってから中ボスへ
+      if(items.length && diff === 'easy'){ startRecover('mid'); return; }
       spawnFrontBoss('mid'); return;
     }
     if(wave >= 10){
-      if(items.length){ startRecover('last'); return; }  // 残りアイテムを拾ってからラスボスへ
+      if(items.length && diff === 'easy'){ startRecover('last'); return; }
       spawnFrontBoss('last'); return;
     }
     wave++; makeWave(wave); player.inv = 60;
@@ -2436,6 +2450,17 @@ function drawTitleButtons(){
   }
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
+function drawDiffButtons(){
+  for(const k in DBTN){
+    const b = DBTN[k], sel = diff === b.key;
+    ctx.fillStyle = sel ? '#d8b45c' : 'rgba(14,23,48,.9)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = sel ? '#fff' : '#d8b45c'; ctx.lineWidth = sel ? 2 : 1;
+    ctx.strokeRect(b.x+.5, b.y+.5, b.w-1, b.h-1);
+    ctx.fillStyle = sel ? '#16233f' : '#ede4d3'; ctx.font = (sel ? 'bold ' : '') + '11px "Yu Mincho",serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.label, b.x + b.w/2, b.y + b.h/2);
+  }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
 function drawDex(){
   ctx.fillStyle = 'rgba(14,23,48,.95)'; ctx.fillRect(0, 0, W, H);
   const cnt = DEX.filter(d => dex[d.id]).length;
@@ -2701,20 +2726,29 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v76', s:24, gap:30},
+      {t:'書類インベーダー　v77', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
       {t:'全10面。5面で中ボス・女将→ラスボス所長', s:11, c:'#d8b45c', gap:18},
-      {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:30},
-      {t:'タップ / スペースで開始', s:12, f:'system-ui,sans-serif', c:'#ede4d3'}
+      {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:30}
     ]);
     drawSeal(W/2, 128, 40);
+    // 難易度選択
+    ctx.fillStyle = 'rgba(237,228,211,.75)'; ctx.font = '10px system-ui,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('難易度を選んでください', W/2, H/2 + 63);
+    drawDiffButtons();
+    ctx.fillStyle = '#ede4d3'; ctx.font = '12px system-ui,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const dl = diff === 'easy' ? 'かんたん' : diff === 'hard' ? 'むずかしい' : '普通';
+    ctx.fillText('タップ / スペースで開始（' + dl + '）', W/2, H/2 + 112);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     drawTitleButtons();
     if(best.score > 0){
       ctx.fillStyle = '#d8b45c'; ctx.font = '11px system-ui,sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('自己ベスト  ' + best.score + '点' + (best.ura > 0 ? '　／　裏' + best.ura + '面到達' : ''), W/2, H/2 + 88);
+      ctx.fillText('自己ベスト  ' + best.score + '点' + (best.ura > 0 ? '　／　裏' + best.ura + '面到達' : ''), W/2, H - 40);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
   } else if(state === 'over'){
@@ -2763,7 +2797,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v76", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v77", 5, 9);
   ctx.restore();
 }
 
@@ -2773,5 +2807,5 @@ function loop(){
   requestAnimationFrame(loop);
 }
 resize(); player = newPlayer(); bullets = []; ebullets = []; enemies = [];
-loadBest(); loadDex();
+loadBest(); loadDex(); loadDiff();
 loop();
