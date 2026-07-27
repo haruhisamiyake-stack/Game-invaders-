@@ -173,7 +173,8 @@ const TBTN = {   // タイトルのモード選択ボタン
   item: { x: W/2-60,  y: H/2+168, w: 120, h: 26, label:'アイテム図鑑' }
 };
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
-const STAGE2_TH = 85;                             // 必殺・二段撃ちに到達する溜め量
+const CHARGE_MAX = 200;                           // 溜めの最大（ゲージ二周ぶん）
+const STAGE2_TH = 195;                            // 二段撃ち解禁＝ゲージを二周ほぼ溜め切る
 
 function newPlayer(){
   return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
@@ -1043,11 +1044,12 @@ function release(){
 // 必殺ビーム発射（stage 1＝通常／stage 2＝真・一括計算）
 function fireBeam(p, stage){
   const st2 = stage === 2;
-  const life = Math.round((22 + p * .22) * (st2 ? 1.15 : 1));
-  beam = { x: player.x, w: (26 + p * 1.25) * (st2 ? 1.7 : 1),
-           power: p * (st2 ? 1.6 : 1), life: life, maxlife: life, acc: 0,
-           stage: stage, second: (stage === 1 && p >= STAGE2_TH) };   // 溜め十分で二段目を予約
-  flash = st2 ? 18 : 6; shake = Math.round((st2 ? 20 : 6) + p * .1);
+  const pw = Math.min(100, p);   // ビームの太さ・持続はゲージ一周ぶんで頭打ち
+  const life = Math.round((22 + pw * .22) * (st2 ? 1.15 : 1));
+  beam = { x: player.x, w: (26 + pw * 1.25) * (st2 ? 1.7 : 1),
+           power: pw * (st2 ? 1.6 : 1), life: life, maxlife: life, acc: 0,
+           stage: stage, second: (stage === 1 && p >= STAGE2_TH) };   // 二周溜め切りで二段目を予約
+  flash = st2 ? 18 : 6; shake = Math.round((st2 ? 20 : 6) + pw * .1);
   if(st2){
     ebullets = []; missiles = [];   // 二段目で敵弾・ミサイルを一掃
     setMsg('真・一括計算　二段撃ち！', 50);
@@ -1058,7 +1060,7 @@ function fireBeam(p, stage){
     beep(300, .5, 'sawtooth', .07); beep(120, .6, 'square', .05); beep(660, .4, 'triangle', .05); beep(990, .45, 'sine', .05);
   } else {
     beep(420, .35, 'sawtooth', .06); beep(150, .5, 'square', .04);
-    if(p >= STAGE2_TH) setMsg('必殺　一括計算　溜め最大！', 34);
+    if(p >= 100) setMsg('必殺　一括計算　溜め最大！', 34);
     else if(p >= 45) setMsg('必殺　一括計算', 30);
   }
 }
@@ -1118,12 +1120,15 @@ function update(){
   const held = kbCharge || chargePtr !== null;
   if(held && (charge > 0 || ki >= 15)){
     const before = charge;
-    charge = Math.min(100, charge + 1.7);
+    charge = Math.min(CHARGE_MAX, charge + 1.7);
     ki = Math.max(0, ki - 1.15);
-    if(before < STAGE2_TH && charge >= STAGE2_TH){   // 二段階に到達した瞬間の合図
-      beep(1200, .12, 'square', .06); beep(1650, .12, 'sine', .05); flash = Math.max(flash, 6);
+    if(before < 100 && charge >= 100){   // 二周目突入の合図
+      beep(880, .1, 'square', .05); beep(1100, .1, 'sine', .04); flash = Math.max(flash, 4);
     }
-    if(frame % 5 === 0) beep(240 + charge*7, .05, 'triangle', .025);
+    if(before < STAGE2_TH && charge >= STAGE2_TH){   // 二段撃ち解禁（二周溜め切り）の合図
+      beep(1300, .14, 'square', .06); beep(1750, .14, 'sine', .05); flash = Math.max(flash, 7);
+    }
+    if(frame % 5 === 0) beep(240 + (charge % 100)*7, .05, 'triangle', .025);
     // ki が尽きても自動発射しない：押している間は溜め続け／保持し、離した時に発射
   } else if(charge > 0){
     release();
@@ -2315,35 +2320,40 @@ function drawBeamStage2(b, half, k, bot){
 }
 
 function drawCharge(){
-  const ready2 = charge >= STAGE2_TH;   // 二段撃ち到達
-  const r = 15 + charge*.16, cx = player.x, cy = player.y-2;
+  const lap2 = charge >= 100;             // 二周目に入っているか
+  const ready2 = charge >= STAGE2_TH;     // 二段撃ち解禁（二周溜め切り）
+  const frac = lap2 ? Math.min(1, (charge - 100) / 100) : charge / 100;
+  const r = 15 + Math.min(100, charge) * .16, cx = player.x, cy = player.y - 2;
+  const TWO_PI = Math.PI * 2, top = -Math.PI / 2;
   ctx.save();
   // 内側の充填
   ctx.globalAlpha = .25 + .2*Math.sin(frame/4);
-  ctx.fillStyle = ready2 ? '#ff5252' : '#d8b45c';
-  ctx.beginPath(); ctx.arc(cx, cy, r*.8, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = ready2 ? '#ff5252' : (lap2 ? '#e0b83a' : '#d8b45c');
+  ctx.beginPath(); ctx.arc(cx, cy, r*.8, 0, TWO_PI); ctx.fill();
   ctx.globalAlpha = 1;
-  // 進捗リング
-  ctx.strokeStyle = ready2 ? '#ffd23f' : '#c0392b'; ctx.lineWidth = ready2 ? 4 : 2.5;
-  ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + Math.PI*2*charge/100); ctx.stroke();
-  // 二段撃ちのしきい値マーカー（この位置まで溜めると二段目）
-  const ma = -Math.PI/2 + Math.PI*2*(STAGE2_TH/100), rr = 15 + STAGE2_TH*.16;
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(cx + Math.cos(ma)*(rr-5), cy + Math.sin(ma)*(rr-5));
-  ctx.lineTo(cx + Math.cos(ma)*(rr+5), cy + Math.sin(ma)*(rr+5));
-  ctx.stroke();
-  // 到達したら脈動リング＋「二段撃ちOK！」
+  // 一周目の完了リング（二周目では下地として全周を朱で表示）
+  if(lap2){
+    ctx.strokeStyle = 'rgba(192,57,43,.55)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TWO_PI); ctx.stroke();
+  }
+  // 現在の周の進捗リング（一周目＝朱／二周目＝金）
+  ctx.strokeStyle = lap2 ? '#ffd23f' : '#c0392b'; ctx.lineWidth = lap2 ? 4 : 2.5;
+  ctx.beginPath(); ctx.arc(cx, cy, r, top, top + TWO_PI * frac); ctx.stroke();
+  // 周回表示
+  ctx.fillStyle = lap2 ? '#ffd23f' : 'rgba(237,228,211,.85)'; ctx.font = 'bold 9px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(lap2 ? '2周目' : '1周目', cx, cy - 1);
+  // 二段撃ち解禁：脈動リング＋「二段撃ちOK！」
   if(ready2){
     const pulse = .5 + .5*Math.sin(frame/4);
     ctx.globalAlpha = .35 + .45*pulse; ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(cx, cy, r + 5 + pulse*4, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, r + 5 + pulse*4, 0, TWO_PI); ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 11px "Yu Mincho",serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.fillText('二段撃ちOK！', cx, cy - r - 9);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.restore();
 }
 
@@ -2817,9 +2827,9 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v81', s:24, gap:30},
+      {t:'書類インベーダー　v82', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
-      {t:'必殺・一括計算　満タンまで溜めて二段撃ち！', s:12, c:'#c0392b', gap:22},
+      {t:'必殺・一括計算　ゲージ二周溜めで二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
       {t:'全10面。5面で中ボス・女将→ラスボス所長', s:11, c:'#d8b45c', gap:18},
       {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:30}
@@ -2888,7 +2898,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v81", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v82", 5, 9);
   ctx.restore();
 }
 
