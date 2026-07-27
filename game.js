@@ -118,7 +118,9 @@ let dex = {};                                      // 税務署ランク図鑑�
 let cutinT = 0, cutinMax = 0, cutinIdx = 0;        // 昇格カットイン演出
 let mode = 'normal';                               // normal | rush（ボスラッシュ） | time（タイムアタック）
 let diff = 'normal';                               // 難易度：easy | normal | hard
-const DIFF_FIRE = { easy: .6, normal: 1, hard: 1.5 };   // 敵の発射頻度倍率
+const DIFF_FIRE = { easy: .6,  normal: 1, hard: 1.5 };   // 敵の発射頻度倍率
+const DIFF_BSPD = { easy: .85, normal: 1, hard: 1.35 };  // 敵弾の速度倍率
+const DIFF_BOSS = { easy: .8,  normal: 1, hard: 1.5 };   // ボスHP倍率
 function loadDiff(){ try{ const d = localStorage.getItem('shorui_diff'); if(d === 'easy' || d === 'normal' || d === 'hard') diff = d; }catch(e){} }
 function setDifficulty(d){ diff = d; try{ localStorage.setItem('shorui_diff', d); }catch(e){} beep(760, .06, 'triangle', .04); }
 let taT = 0;                                       // タイムアタック残り（フレーム）
@@ -653,7 +655,7 @@ function makeBoss(type, arg){
     // 裏面ボスの昇格ラダー（役職が上がるほど大きく・タフ・攻撃的）
     const idx = arg | 0, asp = RANK_ASP[idx];
     const h = 150 + idx*5, w = h * asp, y = 46 + h/2;
-    const hp = (90 + idx*40 + uraStage*4) * 5;   // 裏ボスHP 5倍（歯ごたえ）
+    const hp = Math.round((90 + idx*40 + uraStage*4) * 5 * (DIFF_BOSS[diff] || 1));   // 裏ボスHP 5倍×難易度
     bossObj = { type: 'rank', rank: idx, finale: uraStage === 100 || mode === 'rush' && idx === 9, x: W/2, y: y, y0: y, w: w, h: h, hp: hp, max: hp,
                 t: 0, cool: Math.max(22, 56 - uraStage - idx*3), hurt: 0, next: hp - 12,
                 mslCool: Math.max(70, 150 - uraStage - idx*8), spCool: Math.max(56, 120 - idx*8),
@@ -686,6 +688,12 @@ function makeBoss(type, arg){
     bossObj = { type: 'last', x: W/2, y: 110, w: 86, h: 94, hp: 700, max: 700,
                 t: 0, cool: 60, hurt: 0, next: 685, phase: 1 };
   }
+  // 難易度でボスHPを増減（rankは上で適用済みのため除外）
+  const bm = DIFF_BOSS[diff] || 1;
+  if(bm !== 1 && bossObj && bossObj.type !== 'rank'){
+    bossObj.hp = bossObj.max = Math.round(bossObj.max * bm);
+    bossObj.next = bossObj.max - 12;
+  }
 }
 
 // ボス撃破時：第一→第二→第三形態と復活し、第三を倒すと勝利
@@ -693,7 +701,7 @@ function bossDown(){
   const b = bossObj;
   if(b.phase === 1){
     b.phase = 2;
-    b.hp = b.max = 800;         // 第二形態はHP増（5倍）
+    b.hp = b.max = Math.round(800 * (DIFF_BOSS[diff] || 1));   // 第二形態はHP増（5倍）×難易度
     b.next = b.max - 15;
     b.hurt = 16; b.cool = 100;  // 復活直後は少し間を置く
     b.t = 0;
@@ -704,7 +712,7 @@ function bossDown(){
     // BGMはボス曲を継続（頭出しし直したい場合は bgmSet('boss', true)）
   } else if(b.phase === 2){
     b.phase = 3;
-    b.hp = b.max = 1800;        // 第三形態（かんた）はさらにHP増（倍化）
+    b.hp = b.max = Math.round(1800 * (DIFF_BOSS[diff] || 1));  // 第三形態（かんた）×難易度
     b.next = b.max - 15;
     b.hurt = 18; b.cool = 90;
     b.t = 0;
@@ -1127,7 +1135,8 @@ function update(){
   bullets = bullets.filter(b => b.y > -12 && b.x > -8 && b.x < W+8);
 
   // 敵弾（球速1.5倍）
-  ebullets.forEach(b => { b.y += b.vy * EBULLET_SPEED; b.x += (b.vx || 0) * EBULLET_SPEED; });
+  const es = EBULLET_SPEED * (DIFF_BSPD[diff] || 1);   // 難易度で敵弾の速度を増減
+  ebullets.forEach(b => { b.y += b.vy * es; b.x += (b.vx || 0) * es; });
   ebullets = ebullets.filter(b => b.y < H+10 && b.x > -10 && b.x < W+10);
 
   // 税務ワードの背景表示（ボス戦以外・数秒ごとに切替）
@@ -2726,7 +2735,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v77', s:24, gap:30},
+      {t:'書類インベーダー　v78', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　集中を貯めて放つ', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2797,7 +2806,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v77", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v78", 5, 9);
   ctx.restore();
 }
 
