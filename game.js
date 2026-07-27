@@ -134,6 +134,7 @@ let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let minions = [];    // 表ラスボス第三形態の応援＝小型所長×2
 let beams = [];      // 二段撃ちの追加ビーム（色とりどり・時間差）
+let bonus = null, receipts = [], bonusDone = {};   // ボーナス面「領収書ラッシュ」
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
 let bgPhrase = '', bgPhraseT = 0;   // 税務ワードの背景表示（ボス戦以外）
 let midDone = false;   // 中ボスを倒したか
@@ -740,6 +741,7 @@ function reset(){
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
   mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; bigT = 0; kcutT = 0; cutinT = 0;
   recoverT = 0; pendingBoss = null;
+  bonus = null; receipts = []; bonusDone = {};
   bgPhraseT = 0; bgPhrase = pickPhrase();
   player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; beams = []; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
@@ -1248,6 +1250,7 @@ function update(){
     ebullets = ebullets.filter(b => !b.dead);
   }
 
+  if(bonus){ updateBonus(); return; }   // ボーナス面（領収書ラッシュ）中は通常進行を止める
   if(bossObj) updateBoss(); else updateSwarm();
   if(minions.length) updateMinions();
   if(missiles.length) updateMissiles();
@@ -1287,6 +1290,104 @@ function spawnFrontBoss(which){
     startBossIntro();   // ラスボス登場演出（インクブリード）
   }
 }
+
+/* ---------- 表面：急降下・回り込みする敵 ---------- */
+function maybeStartDive(live){
+  const diving = live.filter(e => e.diving).length;
+  const maxDivers = 2 + Math.floor(wave / 4);
+  if(diving >= maxDivers) return;
+  const rate = 0.006 + wave * 0.0015 + (midDone ? 0.004 : 0);   // 面が進む・中ボス後ほど頻繁
+  if(Math.random() >= rate) return;
+  const cand = live.filter(e => e.alive && !e.diving && !e.float);
+  if(!cand.length) return;
+  const e = cand[Math.floor(Math.random() * cand.length)];
+  e.diving = true; e.dt = 0; e.sx = e.x; e.sy = e.y;
+  e.tx = Math.max(24, Math.min(W - 24, player.x + (Math.random() * 80 - 40)));   // 自機付近へ回り込む
+  beep(300, .06, 'sawtooth', .03);
+}
+function updateDivers(){
+  const DUR = 96;
+  for(const e of enemies){
+    if(!e.alive || !e.diving) continue;
+    e.dt++;
+    const p = e.dt / DUR, s = Math.sin(p * Math.PI);
+    const depth = Math.max(100, H - 80 - e.sy);
+    e.y = e.sy + s * depth;                    // 下へ弧を描いて戻る
+    e.x = e.sx + (e.tx - e.sx) * s;            // 自機側へ回り込み、戻る
+    // 自機との体当たり
+    if(player.inv <= 0 && Math.abs(e.x - player.x) < 15 && Math.abs(e.y - player.y) < 13){
+      if(player.shield > 0){ player.shield--; player.inv = 60; shake = 8; beep(300, .15, 'triangle', .05); }
+      else { lives--; player.inv = 90; shake = 14; beep(120, .3, 'sawtooth', .07); if(lives <= 0){ gameOver(); return; } }
+      e.diving = false; e.dt = 0; e.x = e.sx; e.y = e.sy;
+    }
+    if(e.dt >= DUR){ e.diving = false; e.x = e.sx; e.y = e.sy; }   // 隊列へ帰還
+  }
+}
+
+/* ---------- ボーナス面「領収書ラッシュ」 ---------- */
+function startBonus(nextWave){
+  bonus = { t: 600, next: nextWave, caught: 0 };   // 約10秒
+  enemies = []; ebullets = []; missiles = []; bullets = []; beam = null; beams = []; charge = 0; barriers = [];
+  receipts = []; player.inv = 99999;   // 無敵
+  setMsg('ボーナス　領収書ラッシュ！　拾いまくれ', 100);
+  bgPhrase = ''; beep(880, .1, 'triangle', .06); beep(1180, .1, 'triangle', .05); beep(1480, .12, 'sine', .05);
+}
+function updateBonus(){
+  bonus.t--;
+  if(frame % 6 === 0){   // 領収書を降らせる
+    const gold = Math.random() < 0.15;
+    receipts.push({ x: 22 + Math.random() * (W - 44), y: -12, vy: 1.6 + Math.random() * 1.6, gold: gold, t: 0 });
+  }
+  for(const r of receipts){
+    r.t++; r.y += r.vy; r.x += Math.sin(r.t / 20) * .5;
+    if(!r.got && Math.abs(r.x - player.x) < 20 && Math.abs(r.y - player.y) < 16){
+      r.got = true; const pts = r.gold ? 300 : 80; score += pts; bonus.caught++;
+      addBurst(r.x, r.y, r.gold ? '#ffd23f' : '#ede4d3', r.gold ? 12 : 6);
+      beep(r.gold ? 1046 : 740, .05, 'triangle', .04);
+    }
+  }
+  receipts = receipts.filter(r => !r.got && r.y < H + 14);
+  if(bonus.t <= 0){
+    const nw = bonus.next, caught = bonus.caught;
+    receipts = []; bonus = null; player.inv = 60;
+    wave = nw; makeWave(nw);
+    const kanji = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][nw] || nw;
+    setMsg('領収書 ' + caught + '枚回収！　第' + kanji + '面へ', 100);
+  }
+}
+function drawReceipts(){
+  for(const r of receipts){
+    const w = 16, h = 20, x = r.x - w/2, y = r.y - h/2;
+    ctx.save();
+    if(r.gold){
+      const g = ctx.createRadialGradient(r.x, r.y, 2, r.x, r.y, 16);
+      g.addColorStop(0, 'rgba(255,220,110,.5)'); g.addColorStop(1, 'rgba(255,210,63,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(r.x, r.y, 16, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle = r.gold ? '#fff3cf' : '#ede4d3';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = r.gold ? '#d8a828' : '#b9a888'; ctx.lineWidth = 1; ctx.strokeRect(x+.5, y+.5, w-1, h-1);
+    ctx.fillStyle = r.gold ? '#c0392b' : '#8a7a5a';
+    for(let i=0;i<3;i++) ctx.fillRect(x+3, y+4 + i*4, w-6, 1.4);   // 明細の線
+    ctx.fillStyle = '#c0392b'; ctx.font = '7px "Yu Mincho",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('領', r.x, y + h - 4);
+    ctx.restore();
+  }
+}
+function drawBonus(){
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const pulse = .7 + .3*Math.sin(frame/5);
+  ctx.fillStyle = 'rgba(255,210,63,' + pulse + ')'; ctx.font = 'bold 16px "Yu Mincho",serif';
+  ctx.fillText('領収書ラッシュ！　無敵', W/2, 40);
+  ctx.fillStyle = 'rgba(237,228,211,.9)'; ctx.font = '11px system-ui,sans-serif';
+  ctx.fillText('残り ' + Math.ceil(bonus.t/60) + '秒　／　回収 ' + bonus.caught + ' 枚', W/2, 60);
+  const gw = 160, gx = (W-gw)/2, gy = 74;
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(gx, gy, gw, 4);
+  ctx.fillStyle = '#ffd23f'; ctx.fillRect(gx, gy, gw*bonus.t/600, 4);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
 function updateSwarm(){
   const live = enemies.filter(e => e.alive);
   if(live.length === 0){
@@ -1314,6 +1415,9 @@ function updateSwarm(){
       }
       return;
     }
+    // ボーナス面（領収書ラッシュ）：3面クリア後と7面クリア後に1回ずつ
+    if(wave === 3 && !bonusDone[4]){ bonusDone[4] = true; startBonus(4); return; }
+    if(wave === 7 && !bonusDone[8]){ bonusDone[8] = true; startBonus(8); return; }
     // 進行：全10面。5面で中ボス（交際費の女将）、10面でラスボス
     // 回収タイム（全吸収）は「かんたん」のみ。普通/むずかしいは従来どおり取り逃す
     if(wave === 5 && !midDone){
@@ -1333,8 +1437,12 @@ function updateSwarm(){
   // 裏面：独立移動する敵（フロート）を更新
   if(ura) updateFloaters(live);
 
-  // 隊列移動（マーチ）。裏面は隊列を組む敵のみが対象で、面が進むほど速い
-  const marchers = ura ? live.filter(e => !e.float) : live;
+  // 表面：時々、隊列から離れて急降下・回り込みする敵（回避の駆け引き）
+  if(!ura){ maybeStartDive(live); }
+  updateDivers();
+
+  // 隊列移動（マーチ）。急降下中・フロートは隊列から除外
+  const marchers = live.filter(e => !e.float && !e.diving);
   if(marchers.length){
     const spd = ura ? (8 + Math.min(6, uraStage*0.12)) : 8;
     const interval = ura
@@ -2818,6 +2926,7 @@ function draw(){
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     drawMissiles();
     items.forEach(drawItem);
+    if(receipts.length) drawReceipts();
     if(beams.length) drawExtraBeams();
     if(beam) drawBeam();
     drawPlayer();
@@ -2862,6 +2971,7 @@ function draw(){
       ctx.fillText(combo + ' コンボ', W/2, 16);
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if(bonus) drawBonus();            // ボーナス面（領収書ラッシュ）
     if(recoverT > 0) drawRecover();   // アイテム回収タイム
     if(corpT > 0) drawCorpBanner();   // 法人化バナー
     if(bigT > 0) drawBigMsg();        // ボスの決めゼリフ（大見得）
@@ -2893,7 +3003,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v85', s:24, gap:30},
+      {t:'書類インベーダー　v86', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　ゲージ二周溜めで二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2964,7 +3074,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v85", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v86", 5, 9);
   ctx.restore();
 }
 
