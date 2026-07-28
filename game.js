@@ -389,7 +389,7 @@ function drawBgPhrase(){
   let a = 1;
   if(k < 34) a = k/34; else if(k > 186) a = (220-k)/34;   // フェードイン／アウト
   const n = bgPhrase.length, fs = Math.min(27, Math.floor((W-20)/n));
-  const x = W/2, y = H*0.60;
+  const x = W/2, y = H*0.5;
   ctx.save();
   ctx.globalAlpha = Math.max(0, a);
   ctx.font = 'bold ' + fs + 'px "Yu Mincho",serif';
@@ -3023,7 +3023,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v93", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v94", 5, 9);
   ctx.restore();
 }
 
