@@ -389,12 +389,16 @@ function drawBgPhrase(){
   let a = 1;
   if(k < 34) a = k/34; else if(k > 186) a = (220-k)/34;   // フェードイン／アウト
   const n = bgPhrase.length, fs = Math.min(27, Math.floor((W-20)/n));
+  const x = W/2, y = H*0.60;
   ctx.save();
-  ctx.globalAlpha = 0.34 * Math.max(0, a);
-  ctx.fillStyle = '#f0e2b0';
-  ctx.font = fs + 'px "Yu Mincho",serif';
+  ctx.globalAlpha = Math.max(0, a);
+  ctx.font = 'bold ' + fs + 'px "Yu Mincho",serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(bgPhrase, W/2, H*0.60);
+  // 濃い縁取り（最前面でもくっきり読める）
+  ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(14,23,48,.92)'; ctx.lineJoin = 'round';
+  ctx.strokeText(bgPhrase, x, y);
+  ctx.fillStyle = '#ffe6a0';   // 濃いめの金でくっきり
+  ctx.fillText(bgPhrase, x, y);
   ctx.restore();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
@@ -2813,7 +2817,6 @@ function draw(){
   else { ctx.fillStyle = bgPat; ctx.fillRect(-20, -20, W+40, H+40); }
 
   if(state === 'play'){
-    if(!bossObj) drawBgPhrase();   // 税務ワードの背景表示（ボス戦以外）
     if(bossObj) drawBoss();
     else { const dr = ura ? drawZako : drawDoc; enemies.filter(e=>e.alive).forEach(dr); }
     if(minions.length) drawMinions();
@@ -2882,6 +2885,7 @@ function draw(){
       ctx.restore();
     }
     drawAlly();
+    if(!bossObj) drawBgPhrase();   // 税務ワードを最前面に濃く表示（ボス戦以外）
     if(charge > 0) drawCharge();
     drawBtn();
     drawChips();
@@ -3019,7 +3023,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v92", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v93", 5, 9);
   ctx.restore();
 }
 
