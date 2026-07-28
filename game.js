@@ -2935,8 +2935,11 @@ function draw(){
     if(msgTimer > 0){
       ctx.globalAlpha = Math.min(1, msgTimer/30);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#d8b45c'; ctx.font = '17px "Yu Mincho",serif';
-      ctx.fillText(msg, W/2, H/2);
+      ctx.font = 'bold 17px "Yu Mincho",serif';
+      const my = H*0.18;   // 各面の説明は上部に（中央の税務ワードと重ならないように）
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(14,23,48,.92)'; ctx.lineJoin = 'round';
+      ctx.strokeText(msg, W/2, my);
+      ctx.fillStyle = '#ffd23f'; ctx.fillText(msg, W/2, my);
       ctx.globalAlpha = 1;
     }
     if(paused){   // 一時停止オーバーレイ
@@ -3023,7 +3026,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v94", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v95", 5, 9);
   ctx.restore();
 }
 
