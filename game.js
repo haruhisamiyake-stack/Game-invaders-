@@ -123,6 +123,7 @@ const DIFF_BSPD = { easy: .85, normal: 1, hard: 1.35 };  // 敵弾の速度倍�
 const DIFF_BOSS = { easy: .8,  normal: 1, hard: 1.5 };   // ボスHP倍率
 function loadDiff(){ try{ const d = localStorage.getItem('shorui_diff'); if(d === 'easy' || d === 'normal' || d === 'hard') diff = d; }catch(e){} }
 function setDifficulty(d){ diff = d; try{ localStorage.setItem('shorui_diff', d); }catch(e){} beep(760, .06, 'triangle', .04); }
+function diffJP(){ return diff === 'easy' ? 'かんたん' : diff === 'hard' ? 'むずかしい' : '普通'; }
 let taT = 0;                                       // タイムアタック残り（フレーム）
 let ally = 0, allyN = 0;                           // 税理士お助け：残り時間／体数（最大3）
 let corpT = 0;                                     // 法人化バナー演出タイマー
@@ -2931,7 +2932,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v87', s:24, gap:30},
+      {t:'書類インベーダー　v88', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　ゲージ二周溜めで二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -2964,7 +2965,8 @@ function draw(){
     } else {
       L.push({t:'申告漏れ…書類に埋もれた', s:18, gap:26});
     }
-    L.push({t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:22});
+    L.push({t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:20});
+    L.push({t:'難易度　' + diffJP(), s:11, f:'system-ui,sans-serif', c:'#d8b45c', gap:22});
     L.push({t: rk.m, s:11, c:'rgba(237,228,211,.85)', gap:26});
     L.push({t:'タップでもう一度', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'});
     center(L);
@@ -2983,13 +2985,15 @@ function draw(){
     center(allClear ? [
       {t:'全100面 制覇！', s:22, c:'#d8b45c', gap:28},
       {t:'あなたは伝説の税理士だ', s:12, gap:26},
-      {t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:22},
+      {t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:20},
+      {t:'難易度　' + diffJP(), s:11, f:'system-ui,sans-serif', c:'#d8b45c', gap:22},
       {t: rk.m, s:11, c:'rgba(237,228,211,.85)', gap:26},
       {t:'タップで再挑戦', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
     ] : [
       {t:'所長 撃破', s:23, c:'#d8b45c', gap:28},
       {t:'期限内に申告完了しました', s:12, gap:26},
-      {t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:22},
+      {t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:20},
+      {t:'難易度　' + diffJP(), s:11, f:'system-ui,sans-serif', c:'#d8b45c', gap:22},
       {t: rk.m, s:11, c:'rgba(237,228,211,.85)', gap:26},
       {t:'タップで再挑戦', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
     ]);
@@ -3002,7 +3006,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v87", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v88", 5, 9);
   ctx.restore();
 }
 
