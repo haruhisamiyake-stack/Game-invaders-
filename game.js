@@ -172,7 +172,8 @@ const TBTN = {   // タイトルのモード選択ボタン
   rush: { x: W/2-116, y: H/2+136, w: 72, h: 26, label:'ボスラッシュ' },
   time: { x: W/2-36,  y: H/2+136, w: 72, h: 26, label:'タイムアタック' },
   dex:  { x: W/2+44,  y: H/2+136, w: 72, h: 26, label:'ランク図鑑' },
-  item: { x: W/2-60,  y: H/2+168, w: 120, h: 26, label:'アイテム図鑑' }
+  item: { x: W/2-122, y: H/2+168, w: 116, h: 26, label:'アイテム図鑑' },
+  ura:  { x: W/2+6,   y: H/2+168, w: 116, h: 26, label:'裏面モード' }
 };
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
 const CHARGE_MAX = 200;                           // 溜めの最大（ゲージ二周ぶん）
@@ -254,6 +255,16 @@ function startUra(){
   makeUraWave(1); state = 'play';
   bgPhraseT = 0; bgPhrase = pickPhrase();   // 裏面セリフに切替
   setMsg('裏一面　修羅の申告', 100);
+  bgmSet('ura', true);
+}
+// タイトルから直接「裏面モード」で開始
+function startUraMode(){
+  reset();                       // スコア・ライフ等を初期化（表面設定）
+  ura = true; uraStage = 1; allClear = false;
+  enemies = []; bossObj = null; barriers = []; missiles = []; ebullets = []; bullets = [];
+  makeUraWave(1); player.inv = 90;
+  bgPhraseT = 0; bgPhrase = pickPhrase();
+  setMsg('裏面モード　裏一面　修羅の申告', 110);
   bgmSet('ura', true);
 }
 function uraAllClear(){
@@ -933,6 +944,7 @@ cv.addEventListener('pointerdown', e=>{
     if(inRect(p, DBTN.hard)){ setDifficulty('hard'); return; }
     if(inRect(p, TBTN.rush)){ startRush(); return; }
     if(inRect(p, TBTN.time)){ startTime(); return; }
+    if(inRect(p, TBTN.ura)){ startUraMode(); return; }
     if(inRect(p, TBTN.dex)){ state = 'dex'; return; }
     if(inRect(p, TBTN.item)){ state = 'itemhelp'; return; }
     reset(); return;                         // それ以外は通常開始
@@ -2647,10 +2659,10 @@ function drawChoiceBtn(r, label, col){
 }
 function drawTitleButtons(){
   for(const k in TBTN){
-    const b = TBTN[k];
-    ctx.fillStyle = 'rgba(14,23,48,.9)'; ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = '#d8b45c'; ctx.lineWidth = 1; ctx.strokeRect(b.x+.5, b.y+.5, b.w-1, b.h-1);
-    ctx.fillStyle = '#ede4d3'; ctx.font = '10px "Yu Mincho",serif';
+    const b = TBTN[k], isUra = k === 'ura';
+    ctx.fillStyle = isUra ? 'rgba(60,14,20,.9)' : 'rgba(14,23,48,.9)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = isUra ? '#c0392b' : '#d8b45c'; ctx.lineWidth = isUra ? 1.5 : 1; ctx.strokeRect(b.x+.5, b.y+.5, b.w-1, b.h-1);
+    ctx.fillStyle = isUra ? '#ff8a7a' : '#ede4d3'; ctx.font = (isUra ? 'bold ' : '') + '10px "Yu Mincho",serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.label, b.x + b.w/2, b.y + b.h/2);
   }
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -2932,7 +2944,7 @@ function draw(){
     }
   } else if(state === 'title'){
     center([
-      {t:'書類インベーダー　v88', s:24, gap:30},
+      {t:'書類インベーダー　v89', s:24, gap:30},
       {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
       {t:'必殺・一括計算　ゲージ二周溜めで二段撃ち！', s:12, c:'#c0392b', gap:22},
       {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
@@ -3006,7 +3018,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v88", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v89", 5, 9);
   ctx.restore();
 }
 
