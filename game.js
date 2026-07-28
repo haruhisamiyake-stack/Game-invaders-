@@ -215,19 +215,21 @@ function makeUraWave(n){
   enemies = [];
   const cols = 8, rows = Math.min(4 + Math.floor(n/5), 7);   // 敵を増量（最大8×7=56体）
   const gapX = 40, gapY = 32, x0 = (W - (cols-1)*gapX)/2, y0 = 80;
-  const baseHp = 2 + Math.floor(n/7);                // 基礎HPを底上げ（すぐ倒れないように）
+  // 防御力ランプ：裏1面=等倍 → 裏100面=10倍（面が上がるほど硬く）
+  const hpMul = 1 + 9 * (Math.min(100, n) - 1) / 99;
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
       const tough = (r === 0);
       const sprite = (r*2 + c) % 9;                    // 9種
       const tr = sprite % 4;                           // 特性は4種を循環
       const elite = sprite >= 4;                       // 後半5種はエリート（硬い・高得点）
-      let hp = baseHp + (tough ? 2 + Math.min(3, Math.floor(n/7)) : 0) + (elite ? 2 : 0);
+      // 1面相当の基礎HP（後列・エリート・装甲で上乗せ）にランプ倍率を掛ける
+      const base = 2 + (tough ? 2 : 0) + (elite ? 2 : 0) + (tr === 1 ? 1 : 0);
+      const hp = Math.max(1, Math.round(base * hpMul));
       const e = { x: x0 + c*gapX, y: y0 + r*gapY, w: 26, h: 20, alive: true,
                   kind: (r + c) % 3, sprite: sprite, pt: 20 + n + (elite ? 15 : 0), f: 0,
                   hp: hp, maxhp: hp, hurt: 0, float: false };
       // 特性（sprite%4）
-      if(tr === 1){ e.hp += 1; e.maxhp += 1; }         // 装甲（硬い）
       if(tr === 3){ e.pt += 15; }                      // 高得点
       if(tr === 0){                                    // 機動（常にフロートで大きく蛇行）
         e.float = true; e.t = Math.floor(Math.random()*100);
@@ -3017,7 +3019,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v91", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v92", 5, 9);
   ctx.restore();
 }
 
