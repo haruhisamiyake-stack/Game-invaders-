@@ -164,16 +164,16 @@ const MUTE = { x: W-30, y: 8, w: 22, h: 22 };   // 右上のミュート切替
 const PAUSE = { x: W-58, y: 8, w: 22, h: 22 };   // 一時停止（ミュートの左隣）
 let paused = false;
 const DBTN = {   // 難易度選択ボタン
-  easy:   { x: W/2-115, y: H/2+72, w: 74, h: 26, label:'かんたん', key:'easy' },
-  normal: { x: W/2-37,  y: H/2+72, w: 74, h: 26, label:'普通',     key:'normal' },
-  hard:   { x: W/2+41,  y: H/2+72, w: 74, h: 26, label:'むずかしい', key:'hard' }
+  easy:   { x: W/2-115, y: 262, w: 74, h: 26, label:'かんたん', key:'easy' },
+  normal: { x: W/2-37,  y: 262, w: 74, h: 26, label:'普通',     key:'normal' },
+  hard:   { x: W/2+41,  y: 262, w: 74, h: 26, label:'むずかしい', key:'hard' }
 };
-const TBTN = {   // タイトルのモード選択ボタン
-  rush: { x: W/2-116, y: H/2+136, w: 72, h: 26, label:'ボスラッシュ' },
-  time: { x: W/2-36,  y: H/2+136, w: 72, h: 26, label:'タイムアタック' },
-  dex:  { x: W/2+44,  y: H/2+136, w: 72, h: 26, label:'ランク図鑑' },
-  item: { x: W/2-122, y: H/2+168, w: 116, h: 26, label:'アイテム図鑑' },
-  ura:  { x: W/2+6,   y: H/2+168, w: 116, h: 26, label:'裏面モード' }
+const TBTN = {   // タイトルのサブメニュー（モード＋図鑑）
+  rush: { x: W/2-118, y: 356, w: 76, h: 26, label:'ボスラッシュ' },
+  time: { x: W/2-38,  y: 356, w: 76, h: 26, label:'タイムアタック' },
+  ura:  { x: W/2+42,  y: 356, w: 76, h: 26, label:'裏面モード' },
+  dex:  { x: W/2-80,  y: 390, w: 76, h: 26, label:'ランク図鑑' },
+  item: { x: W/2+4,   y: 390, w: 76, h: 26, label:'アイテム図鑑' }
 };
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
 const CHARGE_MAX = 200;                           // 溜めの最大（ゲージ二周ぶん）
@@ -2943,32 +2943,31 @@ function draw(){
       drawPause();   // ▶アイコンを最前面に
     }
   } else if(state === 'title'){
-    center([
-      {t:'書類インベーダー　v89', s:24, gap:30},
-      {t:'押し寄せる申告書類を、認印で捌く。', s:12, c:'rgba(237,228,211,.75)', gap:22},
-      {t:'必殺・一括計算　ゲージ二周溜めで二段撃ち！', s:12, c:'#c0392b', gap:22},
-      {t:'印を拾って強化：副印・速筆・朱肉・受理印・回復薬・分身', s:10, c:'rgba(237,228,211,.7)', gap:18},
-      {t:'全10面。5面で中ボス・女将→ラスボス所長', s:11, c:'#d8b45c', gap:18},
-      {t:'所長を倒すと…裏面（全100面）へ！', s:11, c:'#c0392b', gap:30}
-    ]);
-    drawSeal(W/2, 128, 40);
-    // 難易度選択
-    ctx.fillStyle = 'rgba(237,228,211,.75)'; ctx.font = '10px system-ui,sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('難易度を選んでください', W/2, H/2 + 63);
+    drawSeal(W/2, 112, 34);
+    // タイトル＋タグライン
+    ctx.fillStyle = '#ede4d3'; ctx.font = '25px "Yu Mincho",serif';
+    ctx.fillText('書類インベーダー', W/2, 178);
+    ctx.fillStyle = 'rgba(237,228,211,.72)'; ctx.font = '11px "Yu Mincho",serif';
+    ctx.fillText('押し寄せる申告書類を、認印で捌く。', W/2, 204);
+    ctx.fillStyle = '#d8b45c'; ctx.font = '10px "Yu Mincho",serif';
+    ctx.fillText('全10面 → 中ボス → ラスボス → 裏面100面', W/2, 224);
+    // 難易度
+    ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '10px system-ui,sans-serif';
+    ctx.fillText('難易度', W/2, 249);
     drawDiffButtons();
-    ctx.fillStyle = '#ede4d3'; ctx.font = '12px system-ui,sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const dl = diff === 'easy' ? 'かんたん' : diff === 'hard' ? 'むずかしい' : '普通';
-    ctx.fillText('タップ / スペースで開始（' + dl + '）', W/2, H/2 + 112);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    // 開始プロンプト（主役）
+    ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 15px system-ui,sans-serif';
+    ctx.fillText('▶ タップで開始（' + diffJP() + '）', W/2, 316);
+    // 区切り線
+    ctx.strokeStyle = 'rgba(216,180,92,.25)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W/2-130, 338); ctx.lineTo(W/2+130, 338); ctx.stroke();
     drawTitleButtons();
     if(best.score > 0){
-      ctx.fillStyle = '#d8b45c'; ctx.font = '11px system-ui,sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('自己ベスト  ' + best.score + '点' + (best.ura > 0 ? '　／　裏' + best.ura + '面到達' : ''), W/2, H - 40);
-      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#d8b45c'; ctx.font = '10px system-ui,sans-serif';
+      ctx.fillText('ベスト ' + best.score.toLocaleString() + '点' + (best.ura > 0 ? '　/　裏' + best.ura + '面' : ''), W/2, 440);
     }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   } else if(state === 'over'){
     const L = [], rk = rankOf(score);
     if(uraStage > 0){                              // 裏面での力尽き＝到達面を表示
@@ -3018,7 +3017,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v89", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v91", 5, 9);
   ctx.restore();
 }
 
