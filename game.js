@@ -110,7 +110,7 @@ const RANK_LINES = [
 
 let state = 'title';       // title | play | over | win | uraAsk
 let wave = 1, score = 0, lives = 3;
-let ura = false, uraStage = 0, allClear = false;   // 裏面（全100面・雑魚のみ・面ごとに難化）
+let ura = false, uraStage = 0, allClear = false;   // 裏面（全200面・雑魚のみ・面ごとに難化）
 let best = { score: 0, ura: 0 };                   // 自己ベスト（localStorage）
 let combo = 0, comboT = 0, pops = [], scoreMul = 1;   // コンボ／スコアポップ／控除倍率
 let bursts = [];                                    // 撃破エフェクト（弾ける粒子）
@@ -208,15 +208,15 @@ function makeWave(n){
   dir = 1; stepTimer = 0;
 }
 
-/* ---------- 裏面（全100面・雑魚のみ・面ごとに難化） ---------- */
+/* ---------- 裏面（全200面・雑魚のみ・面ごとに難化） ---------- */
 // 全部が雑魚キャラだが、面が進むほど硬く・速く・弾も多彩に。
 // 一部の敵は隊列を離れて独立移動（フロート）する＝動きが多彩。
 function makeUraWave(n){
   enemies = [];
   const cols = 8, rows = Math.min(4 + Math.floor(n/5), 7);   // 敵を増量（最大8×7=56体）
   const gapX = 40, gapY = 32, x0 = (W - (cols-1)*gapX)/2, y0 = 80;
-  // 防御力ランプ：裏1面=等倍 → 裏100面=10倍（面が上がるほど硬く）
-  const hpMul = 1 + 9 * (Math.min(100, n) - 1) / 99;
+  // 防御力ランプ：裏1面=等倍 → 裏100面≒10倍 → 裏200面=20倍（面が上がるほど硬く）
+  const hpMul = 1 + 19 * (Math.min(200, n) - 1) / 199;
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
       const tough = (r === 0);
@@ -288,9 +288,9 @@ function updateFloaters(live){
 function enemyFire(live){
   let rate, bspd, aimCh;
   if(ura){
-    rate  = Math.min(.11, .024 + uraStage*.0045);
-    bspd  = Math.min(5.2, 2.6 + uraStage*.06);
-    aimCh = Math.min(.85, .2 + uraStage*.03);
+    rate  = Math.min(.17, .024 + uraStage*.0040);   // 200面まで上がり続ける
+    bspd  = Math.min(6.6, 2.6 + uraStage*.045);
+    aimCh = Math.min(.95, .2 + uraStage*.02);
   } else {
     rate = .012 + wave*.006; bspd = 2.6 + wave*.2; aimCh = 0;
   }
@@ -304,9 +304,9 @@ function enemyFire(live){
       ebullets.push({ x: s.x, y: s.y + 12, vy: bspd/EBULLET_SPEED, kind: ura ? 1 : 0 });
     }
   }
-  if(ura && uraStage >= 12 && Math.random() < .006 + uraStage*.0006){   // 扇状の一斉射撃
+  if(ura && uraStage >= 12 && Math.random() < .006 + uraStage*.0007){   // 扇状の一斉射撃（面が進むと本数増）
     const s = live[Math.floor(Math.random()*live.length)];
-    const a0 = Math.atan2(player.y - s.y, player.x - s.x), n = 3;
+    const a0 = Math.atan2(player.y - s.y, player.x - s.x), n = uraStage >= 120 ? 5 : (uraStage >= 60 ? 4 : 3);
     for(let i=0;i<n;i++){
       const a = a0 + (i-(n-1)/2)*.3;
       ebullets.push({ x: s.x, y: s.y + 10, vx: Math.cos(a)*bspd/EBULLET_SPEED, vy: Math.sin(a)*bspd/EBULLET_SPEED, kind:1 });
@@ -445,7 +445,8 @@ function handleUraAsk(p){
 }
 
 /* ---------- 昇格カットイン ---------- */
-function startCutin(idx){ cutinMax = cutinT = 78; cutinIdx = idx; beep(300, .4, 'sine', .05); beep(160, .5, 'square', .04); }
+let cutinShin = false;
+function startCutin(idx, shin){ cutinMax = cutinT = 78; cutinIdx = idx; cutinShin = !!shin; beep(300, .4, 'sine', .05); beep(160, .5, 'square', .04); }
 function drawCutin(){
   const t = cutinMax - cutinT, k = t / cutinMax;
   ctx.save();
@@ -466,11 +467,11 @@ function drawCutin(){
   // 役職名＋参上
   ctx.globalAlpha = Math.min(1, t/12) * (cutinT < 12 ? cutinT/12 : 1);
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  const finale = cutinIdx === 9;
+  const finale = cutinIdx === 9 && (cutinShin || mode === 'rush');
   ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 11px system-ui,sans-serif';
-  ctx.fillText((finale ? '裏ラスボス' : '裏中ボス'), 18, cy - 22);
+  ctx.fillText((finale ? '裏ラスボス' : (cutinShin ? '裏中ボス（真）' : '裏中ボス')), 18, cy - 22);
   ctx.fillStyle = '#fff'; ctx.font = 'bold 24px "Yu Mincho",serif';
-  ctx.fillText(RANK_NAME[cutinIdx], 18, cy + 2);
+  ctx.fillText((cutinShin ? '真・' : '') + RANK_NAME[cutinIdx], 18, cy + 2);
   ctx.fillStyle = '#c0392b'; ctx.font = 'bold 18px "Yu Mincho",serif';
   ctx.fillText('参上！', 18, cy + 30);
   // 階級スター
@@ -679,7 +680,7 @@ function makeBoss(type, arg){
     const idx = arg | 0, asp = RANK_ASP[idx];
     const h = 150 + idx*5, w = h * asp, y = 46 + h/2;
     const hp = Math.round((90 + idx*40 + uraStage*4) * 5 * (DIFF_BOSS[diff] || 1));   // 裏ボスHP 5倍×難易度
-    bossObj = { type: 'rank', rank: idx, finale: uraStage === 100 || mode === 'rush' && idx === 9, x: W/2, y: y, y0: y, w: w, h: h, hp: hp, max: hp,
+    bossObj = { type: 'rank', rank: idx, finale: uraStage === 200 || mode === 'rush' && idx === 9, x: W/2, y: y, y0: y, w: w, h: h, hp: hp, max: hp,
                 t: 0, cool: Math.max(22, 56 - uraStage - idx*3), hurt: 0, next: hp - 12,
                 mslCool: Math.max(70, 150 - uraStage - idx*8), spCool: Math.max(56, 120 - idx*8),
                 ultCool: 200 + idx*8, ult: null };
@@ -1343,13 +1344,16 @@ function updateDivers(){
 function updateSwarm(){
   const live = enemies.filter(e => e.alive);
   if(live.length === 0){
-    if(ura){                                   // 裏面：全100面。クリアで次面へ
-      if(uraStage >= 100){ uraAllClear(); return; }
+    if(ura){                                   // 裏面：全200面。クリアで次面へ
+      if(uraStage >= 200){ uraAllClear(); return; }
       uraStage++;
-      if(uraStage % 10 === 0){                  // 10面ごとに昇格ボス（役職6段階のラダー）
-        const finale = uraStage === 100;
-        const idx = Math.min(9, (uraStage / 10) - 1);   // 裏10=調査官…裏100=国税庁長官（10段階）
-        makeBoss('rank', idx); player.inv = 60; startCutin(idx);   // 昇格カットイン
+      if(uraStage % 10 === 0){                  // 10面ごとに昇格ボス（役職ラダーを2周・2周目は真・）
+        const finale = uraStage === 200;
+        const bossNum = uraStage / 10;          // 1..20
+        const idx = (bossNum - 1) % 10;         // 0..9 を2周（裏110〜200は真・）
+        const shin = bossNum > 10;              // 2周目＝真・（さらに強い）
+        makeBoss('rank', idx); bossObj.shin = shin; bossObj.finale = finale;
+        player.inv = 60; startCutin(idx, shin);   // 昇格カットイン
         bgmSet('uraBoss', true);                                   // 裏面ボス戦BGM
         if(finale){ beep(160, .6, 'sawtooth', .07); beep(90, .7, 'square', .05); } else beep(200, .5, 'sawtooth', .06);
         return;
@@ -1602,7 +1606,7 @@ function updateMidBoss(b){
   if(b.type === 'rank'){
     if(!b.phase2 && b.hp <= b.max/2){          // 体力半分で攻撃パターン変化
       b.phase2 = true; shake = 14; flash = 8; b.cool = 16; b.ult = null;
-      setMsg(RANK_NAME[b.rank] + '　本気！', 60); beep(180, .4, 'sawtooth', .06); beep(90, .5, 'square', .05);
+      setMsg((b.shin ? '真・' : '') + RANK_NAME[b.rank] + '　本気！', 60); beep(180, .4, 'sawtooth', .06); beep(90, .5, 'square', .05);
     }
     rankAttack(b);       // 役職別の攻撃
     updateRankUlt(b);    // 差押えビーム進行
@@ -1855,13 +1859,13 @@ function drawMorph(){
 
 // 裏中ボス（交際費の女将）撃破 → 次の裏面へ
 function uraBossDefeated(){
-  const nm = bossObj ? (bossObj.type === 'rank' ? RANK_NAME[bossObj.rank] : bossObj.type === 'chosa' ? '税務調査官' : '交際費の女将') : '';
+  const nm = bossObj ? (bossObj.type === 'rank' ? (bossObj.shin ? '真・' : '') + RANK_NAME[bossObj.rank] : bossObj.type === 'chosa' ? '税務調査官' : '交際費の女将') : '';
   if(bossObj && bossObj.type === 'rank') unlockDex('r' + bossObj.rank);
   if(mode === 'rush'){ rushBossDefeated(); return; }   // ボスラッシュは専用進行
   score += 800; shake = 18; flash = 12;
   beep(660, .4, 'triangle', .06); beep(990, .3, 'triangle', .05);
   bossObj = null; missiles = []; ebullets = [];
-  if(uraStage >= 100){ uraAllClear(); return; }   // 裏100面ボス撃破＝全制覇
+  if(uraStage >= 200){ uraAllClear(); return; }   // 裏200面ボス撃破＝全制覇
   uraStage++; makeUraWave(uraStage); player.inv = 90;
   bgmSet('ura', true);                    // 裏面テーマ（雑魚面）へ戻す
   setMsg(nm + ' 撃破！　裏' + uraStage + '面へ', 100);
@@ -2325,7 +2329,7 @@ function drawRankBoss(b){
   ctx.strokeStyle = 'rgba(237,228,211,.75)'; ctx.lineWidth = 1; ctx.strokeRect(bx+.5, by+.5, bw-1, bh-1);
   ctx.fillStyle = boss6 ? '#ffd23f' : '#d8b45c'; ctx.font = (boss6 ? 'bold 10px' : '9px') + ' system-ui,sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText((finale ? '裏ラスボス　' : '裏中ボス　') + RANK_NAME[idx], W/2, by - 6);
+  ctx.fillText((finale ? '裏ラスボス　' : '裏中ボス　') + (b.shin ? '真・' : '') + RANK_NAME[idx], W/2, by - 6);
   drawBossSpeech(b, RANK_LINES[idx]);
 }
 function drawBoss(){
@@ -2619,8 +2623,8 @@ function drawHUD(){
   ctx.textAlign = 'left';  ctx.fillText('SCORE ' + score, 8, H-12);
   ctx.textAlign = 'right';
   ctx.fillText(bossObj
-    ? (bossObj.type === 'last' ? 'FINAL' : bossObj.front ? 'MID BOSS' : (bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') ? ('裏 ' + uraStage + '/100') : 'MID BOSS')
-    : (ura ? '裏 ' + uraStage + '/100' : 'STAGE ' + wave + '/10'), W-8, H-12);
+    ? (bossObj.type === 'last' ? 'FINAL' : bossObj.front ? 'MID BOSS' : (bossObj.type === 'kousai' || bossObj.type === 'chosa' || bossObj.type === 'kokuzei' || bossObj.type === 'rank') ? ('裏 ' + uraStage + '/200') : 'MID BOSS')
+    : (ura ? '裏 ' + uraStage + '/200' : 'STAGE ' + wave + '/10'), W-8, H-12);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#c0392b';
   let s = ''; for(let i=0;i<lives;i++) s += '● ';
@@ -2960,7 +2964,7 @@ function draw(){
     ctx.fillStyle = 'rgba(237,228,211,.72)'; ctx.font = '11px "Yu Mincho",serif';
     ctx.fillText('押し寄せる申告書類を、認印で捌く。', W/2, 204);
     ctx.fillStyle = '#d8b45c'; ctx.font = '10px "Yu Mincho",serif';
-    ctx.fillText('全10面 → 中ボス → ラスボス → 裏面100面', W/2, 224);
+    ctx.fillText('全10面 → 中ボス → ラスボス → 裏面200面', W/2, 224);
     // 難易度
     ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '10px system-ui,sans-serif';
     ctx.fillText('難易度', W/2, 249);
@@ -2996,14 +3000,14 @@ function draw(){
       {t:'所長 撃破！', s:24, c:'#d8b45c', gap:28},
       {t:'しっかり納税、おつかれさま。', s:12, gap:24},
       {t:'…だが、申告に終わりはない。', s:12, c:'#c0392b', gap:26},
-      {t:'裏面（全100面）に突入しますか？', s:13, gap:18}
+      {t:'裏面（全200面）に突入しますか？', s:13, gap:18}
     ]);
     drawChoiceBtn(YESBTN, 'YES 突入', '#c0392b');
     drawChoiceBtn(NOBTN,  'NO 終了',  '#5aa9e6');
   } else if(state === 'win'){
     const rk = rankOf(score);
     center(allClear ? [
-      {t:'全100面 制覇！', s:22, c:'#d8b45c', gap:28},
+      {t:'全200面 制覇！', s:22, c:'#d8b45c', gap:28},
       {t:'あなたは伝説の税理士だ', s:12, gap:26},
       {t:'SCORE ' + score + '　ランク ' + rk.r, s:15, f:'system-ui,sans-serif', c: rk.c, gap:20},
       {t:'難易度　' + diffJP(), s:11, f:'system-ui,sans-serif', c:'#d8b45c', gap:22},
@@ -3026,7 +3030,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v95", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v96", 5, 9);
   ctx.restore();
 }
 
