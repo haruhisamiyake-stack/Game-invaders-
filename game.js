@@ -973,14 +973,23 @@ function tap(){
   if(state === 'play') shoot();
 }
 
+// 裏100面以降のやり込み強化レベル（10面ごとに1段階、最大10）
+function uraPowLevel(){ return ura ? Math.max(0, Math.min(10, Math.ceil((uraStage - 100) / 10))) : 0; }
 function wingOffsets(){
-  // 分身の左右オフセット（1機＝左、2機＝左右）
-  return player.wings === 1 ? [-26] : player.wings >= 2 ? [-26, 26] : [];
+  // 分身の左右オフセット。裏100面以降は強化レベルに応じて僚機（味方）が増える
+  const total = Math.min(6, player.wings + Math.floor(uraPowLevel() / 2));
+  const outs = [];
+  for(let i=0;i<total;i++){
+    const pair = Math.floor(i/2), sign = (i % 2 === 0) ? -1 : 1;
+    outs.push(sign * (26 + pair*16));   // -26,+26,-42,+42,-58,+58
+  }
+  return outs;
 }
 function shoot(){
   if(player.cool > 0 || charge > 0 || state !== 'play') return;
-  const ink = player.inkT > 0, dmg = ink ? 2 : 1;   // 朱肉で強化弾（威力2）
-  const n = 1 + player.sub * 2;               // 副印で2WAY→3WAY→5WAY
+  const pow = uraPowLevel();
+  const ink = player.inkT > 0, dmg = (ink ? 2 : 1) + Math.floor(pow / 4);   // 朱肉＋やり込みで威力UP
+  const n = 1 + player.sub * 2 + Math.min(6, pow);   // 副印＋やり込みで弾（武器）が増える
   for(let i=0;i<n;i++){
     const off = (i - (n-1)/2);
     bullets.push({ x: player.x + off*4, y: player.y - 12, w: 4, h: 10, vx: off*1.5, dmg, ink });
@@ -989,7 +998,8 @@ function shoot(){
   for(const wx of wingOffsets()){
     bullets.push({ x: player.x + wx, y: player.y - 8, w: 4, h: 10, vx: 0, dmg, ink });
   }
-  player.cool = player.etaxT > 0 ? 4 : (player.rapidT > 0 ? 7 : 14);   // e-Taxで超連射／速筆で連射
+  const base = player.etaxT > 0 ? 4 : (player.rapidT > 0 ? 7 : 14);
+  player.cool = Math.max(3, base - Math.floor(pow / 3));   // やり込みで連射も速く
   beep(880, .06, 'square', .04);
 }
 
@@ -1359,7 +1369,13 @@ function updateSwarm(){
         return;
       }
       makeUraWave(uraStage); player.inv = 60;
-      setMsg('裏' + uraStage + '面' + (barriers.length ? '　防壁あり' : ''), 80);
+      let um = '裏' + uraStage + '面' + (barriers.length ? '　防壁あり' : '');
+      const pw = uraPowLevel();
+      if(pw > 0){
+        if((uraStage - 1) % 10 === 0){ um = '裏強化 Lv.' + pw + '！　味方＋武器 増強　／　' + um; flash = Math.max(flash, 6); beep(1046,.1,'triangle',.05); beep(1400,.1,'sine',.04); }
+        else um += '　（裏強化Lv.' + pw + '）';
+      }
+      setMsg(um, 90);
       return;
     }
     // 回収タイム進行中：全アイテム回収 or 時間切れでボスへ
@@ -2629,6 +2645,12 @@ function drawHUD(){
   ctx.fillStyle = '#c0392b';
   let s = ''; for(let i=0;i<lives;i++) s += '● ';
   ctx.fillText(s.trim(), W/2, H-12);
+  // やり込み強化レベル（裏100面以降）
+  if(uraPowLevel() > 0){
+    ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 9px system-ui,sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('★裏強化 Lv.' + uraPowLevel(), 8, H-26);
+  }
 }
 
 function drawPause(){
@@ -3030,7 +3052,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v96", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v97", 5, 9);
   ctx.restore();
 }
 
