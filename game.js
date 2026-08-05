@@ -180,10 +180,32 @@ const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍
 const CHARGE_MAX = 200;                           // 溜めの最大（ゲージ二周ぶん）
 const STAGE2_TH = 195;                            // 二段撃ち解禁＝ゲージを二周ほぼ溜め切る
 
+// ===== 選択できる機体（コード描き分け・全機体使用可） =====
+const SHIPS = [
+  { id:'std',  name:'認印号',    desc:'バランス型。クセがなく扱いやすい', tags:'標準',
+    body:'#e6d3a0', btn:'#33517f', lcd:'1040',  muzzle:'#c0392b',
+    coolMul:1,    dmgAdd:0, dmgMul:1,    chargeMul:1,   livesAdd:0, wings0:0, speedMul:1 },
+  { id:'rapid',name:'速筆号',    desc:'連射がとても速い／1発の威力は控えめ', tags:'連射↑ 威力↓',
+    body:'#dfe7ef', btn:'#2a7de1', lcd:'RAPID', muzzle:'#2a7de1',
+    coolMul:0.62, dmgAdd:0, dmgMul:0.85, chargeMul:1,   livesAdd:0, wings0:0, speedMul:1.05 },
+  { id:'power',name:'実印号',    desc:'一撃が重い／連射はゆっくり', tags:'威力↑ 連射↓',
+    body:'#c9a24a', btn:'#7a1f1f', lcd:'JITSU', muzzle:'#7a1f1f',
+    coolMul:1.4,  dmgAdd:1, dmgMul:1,    chargeMul:1,   livesAdd:0, wings0:0, speedMul:0.95 },
+  { id:'etax', name:'電子申告号', desc:'必殺の溜めが速い／ライフ-1', tags:'溜め↑ ライフ-1',
+    body:'#2fb0a0', btn:'#0e3b36', lcd:'e-Tax', muzzle:'#39c8c0',
+    coolMul:1,    dmgAdd:0, dmgMul:1,    chargeMul:1.55,livesAdd:-1,wings0:0, speedMul:1 },
+  { id:'wing', name:'分身号',    desc:'僚機1機で開始／弾はやや弱い', tags:'僚機+1 威力↓',
+    body:'#d8b0e0', btn:'#5a2d7a', lcd:'BUN',  muzzle:'#8e44ad',
+    coolMul:1,    dmgAdd:0, dmgMul:0.9,  chargeMul:1,   livesAdd:0, wings0:1, speedMul:1 }
+];
+let shipId = 0;
+function ship(){ return SHIPS[shipId] || SHIPS[0]; }
+function loadShip(){ try{ const s = +localStorage.getItem('shorui_ship'); if(s>=0 && s<SHIPS.length) shipId = s; }catch(e){} }
+function setShip(i){ shipId = i; try{ localStorage.setItem('shorui_ship', i); }catch(e){} }
 function newPlayer(){
-  return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6, cool: 0, inv: 0,
+  return { x: W/2, y: H-42, w: 30, h: 20, speed: 4.6 * ship().speedMul, cool: 0, inv: 0,
            sub: 0, subT: 0, rapidT: 0, shield: 0,
-           wings: 0, inkT: 0, etaxT: 0, kojoT: 0 };
+           wings: ship().wings0, inkT: 0, etaxT: 0, kojoT: 0 };
 }
 
 function makeWave(n){
@@ -754,7 +776,7 @@ function bossDown(){
 }
 
 function reset(){
-  wave = 1; score = 0; lives = diff === 'easy' ? 4 : 3; midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
+  wave = 1; score = 0; lives = Math.max(1, (diff === 'easy' ? 4 : 3) + ship().livesAdd); midDone = false; introT = 0; morphT = 0; overT = 0; winT = 0;
   ura = false; uraStage = 0; allClear = false;
   ki = 45; charge = 0; beam = null; flash = 0; items = []; paused = false;
   combo = 0; comboT = 0; pops = []; bursts = []; scoreMul = 1;
@@ -900,6 +922,13 @@ addEventListener('keydown', e=>{
   if(e.code === 'KeyP' || e.code === 'Escape'){ togglePause(); e.preventDefault(); return; }
   if(paused) return;   // 停止中は他の入力を無視
   if(state === 'dex' || state === 'itemhelp' || state === 'rank'){ state = 'title'; return; }
+  if(state === 'select'){   // 機体選択：←→で選び、Space/Enterで出撃
+    if(e.code === 'ArrowLeft'){ shipId = (shipId - 1 + SHIPS.length) % SHIPS.length; }
+    else if(e.code === 'ArrowRight'){ shipId = (shipId + 1) % SHIPS.length; }
+    else if(e.code === 'Space' || e.code === 'Enter'){ setShip(shipId); reset(); }
+    else { state = 'title'; }
+    e.preventDefault(); return;
+  }
   if(state === 'title' && e.code === 'KeyG'){ state = 'dex'; return; }
   keys[e.code] = true;
   if(['ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
@@ -957,8 +986,9 @@ cv.addEventListener('pointerdown', e=>{
     if(inRect(p, TBTN.rank)){ openRank(rankMode, diff); return; }
     if(inRect(p, TBTN.dex)){ state = 'dex'; return; }
     if(inRect(p, TBTN.item)){ state = 'itemhelp'; return; }
-    reset(); return;                         // それ以外は通常開始
+    state = 'select'; return;                 // それ以外は機体選択へ
   }
+  if(state === 'select'){ handleSelectTap(p); return; }
   if(state === 'over' || state === 'win'){
     if(inRect(p, RANKBTN)){ registerScore(); return; }
     reset(); return;
@@ -976,7 +1006,9 @@ cv.addEventListener('pointerup', ptrEnd);
 cv.addEventListener('pointercancel', ptrEnd);
 
 function tap(){
-  if(state === 'title' || state === 'over' || state === 'win'){ reset(); return; }
+  if(state === 'title'){ state = 'select'; return; }        // タイトル→機体選択
+  if(state === 'select'){ setShip(shipId); reset(); return; } // 現在の機体で出撃
+  if(state === 'over' || state === 'win'){ reset(); return; }
   if(state === 'play') shoot();
 }
 
@@ -994,8 +1026,10 @@ function wingOffsets(){
 }
 function shoot(){
   if(player.cool > 0 || charge > 0 || state !== 'play') return;
-  const pow = uraPowLevel();
-  const ink = player.inkT > 0, dmg = (ink ? 2 : 1) + Math.floor(pow / 4);   // 朱肉＋やり込みで威力UP
+  const pow = uraPowLevel(), sh = ship();
+  const ink = player.inkT > 0;
+  let dmg = (ink ? 2 : 1) + Math.floor(pow / 4) + sh.dmgAdd;   // 朱肉＋やり込み＋機体で威力
+  dmg = Math.max(1, Math.round(dmg * sh.dmgMul));
   const n = 1 + player.sub * 2 + Math.min(6, pow);   // 副印＋やり込みで弾（武器）が増える
   for(let i=0;i<n;i++){
     const off = (i - (n-1)/2);
@@ -1006,7 +1040,7 @@ function shoot(){
     bullets.push({ x: player.x + wx, y: player.y - 8, w: 4, h: 10, vx: 0, dmg, ink });
   }
   const base = player.etaxT > 0 ? 4 : (player.rapidT > 0 ? 7 : 14);
-  player.cool = Math.max(3, base - Math.floor(pow / 3));   // やり込みで連射も速く
+  player.cool = Math.max(3, Math.round((base - Math.floor(pow / 3)) * sh.coolMul));   // 機体・やり込みで連射
   beep(880, .06, 'square', .04);
 }
 
@@ -1221,7 +1255,7 @@ function update(){
   const held = kbCharge || chargePtr !== null;
   if(held && (charge > 0 || ki >= 15)){
     const before = charge;
-    charge = Math.min(CHARGE_MAX, charge + 1.7);
+    charge = Math.min(CHARGE_MAX, charge + 1.7 * ship().chargeMul);
     ki = Math.max(0, ki - 1.15);
     if(before < 100 && charge >= 100){   // 二周目突入の合図
       beep(880, .1, 'square', .05); beep(1100, .1, 'sine', .04); flash = Math.max(flash, 4);
@@ -2099,22 +2133,23 @@ function drawZako(e){
   }
 }
 // 自機＝電卓
-function drawSealShip(x, y, scale, alpha){
+function drawSealShip(x, y, scale, alpha, sh){
+  sh = sh || ship();
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(x, y); ctx.scale(scale, scale);
   // 砲口（弾の出口）
-  ctx.fillStyle = '#c0392b'; ctx.fillRect(-2, -15, 4, 5);
+  ctx.fillStyle = sh.muzzle; ctx.fillRect(-2, -15, 4, 5);
   // 電卓本体
-  ctx.fillStyle = '#e6d3a0'; ctx.fillRect(-13, -11, 26, 21);
+  ctx.fillStyle = sh.body; ctx.fillRect(-13, -11, 26, 21);
   ctx.strokeStyle = '#8a6a1f'; ctx.lineWidth = 1; ctx.strokeRect(-12.5, -10.5, 25, 20);
   // 液晶
   ctx.fillStyle = '#16233f'; ctx.fillRect(-10.5, -8.5, 21, 6);
   ctx.fillStyle = '#7fe6a0'; ctx.font = 'bold 6px "Courier New",monospace';
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  ctx.fillText('1040', 9, -5.2);
+  ctx.fillText(sh.lcd || '1040', 9, -5.2);
   // ボタン（2行×4列）
-  ctx.fillStyle = '#33517f';
+  ctx.fillStyle = sh.btn;
   for(let r=0;r<2;r++) for(let c=0;c<4;c++){ ctx.fillRect(-10.5 + c*5.4, -0.3 + r*4.7, 3.8, 3.3); }
   ctx.restore();
 }
@@ -2851,6 +2886,46 @@ function drawResultRankBtn(){
   ctx.fillText('▶ ランキング登録', r.x + r.w/2, r.y + r.h/2);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
+
+/* ===================== 機体選択 ===================== */
+function selectRowRect(i){ return { x: 8, y: 56 + i*96, w: W-16, h: 90 }; }
+function handleSelectTap(p){
+  for(let i=0;i<SHIPS.length;i++){
+    if(inRect(p, selectRowRect(i))){ setShip(i); reset(); return; }   // 選んで出撃
+  }
+  state = 'title';   // 下部タップで戻る
+}
+function drawSelect(){
+  ctx.fillStyle = 'rgba(14,23,48,.97)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#d8b45c'; ctx.font = 'bold 15px "Yu Mincho",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText('機体選択', W/2, 10);
+  ctx.fillStyle = 'rgba(237,228,211,.6)'; ctx.font = '10px system-ui,sans-serif';
+  ctx.fillText('機体をタップして出撃', W/2, 32);
+  for(let i=0;i<SHIPS.length;i++){
+    const r = selectRowRect(i), sh = SHIPS[i], sel = i === shipId;
+    ctx.fillStyle = sel ? 'rgba(216,180,92,.16)' : 'rgba(255,255,255,.03)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = sel ? '#ffd23f' : 'rgba(216,180,92,.4)'; ctx.lineWidth = sel ? 2 : 1;
+    ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+    // プレビュー機体（コード描き）
+    drawSealShip(r.x + 42, r.y + r.h/2, 2.0, 1, sh);
+    // 名前
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = sh.body; ctx.font = 'bold 16px "Yu Mincho",serif';
+    ctx.fillText(sh.name, r.x + 80, r.y + 22);
+    // 性能タグ
+    ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 11px system-ui,sans-serif';
+    ctx.fillText(sh.tags, r.x + 80, r.y + 45);
+    // 説明
+    ctx.fillStyle = 'rgba(237,228,211,.75)'; ctx.font = '11px "Yu Mincho",serif';
+    ctx.fillText(sh.desc, r.x + 80, r.y + 68);
+    if(sel){ ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 10px system-ui,sans-serif';
+      ctx.textAlign = 'right'; ctx.fillText('★選択中', r.x + r.w - 8, r.y + 15); }
+  }
+  ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '10px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('画面下タップで戻る', W/2, H - 6);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
 // アイテムの効果説明（ITEMS の並び順）
 const ITEM_HELP = [
   '弾数アップ（3発→5発）／約15秒',
@@ -3166,11 +3241,13 @@ function draw(){
     drawItemHelp();
   } else if(state === 'rank'){
     drawRank();
+  } else if(state === 'select'){
+    drawSelect();
   }
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v100", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v101", 5, 9);
   ctx.restore();
 }
 
@@ -3180,5 +3257,5 @@ function loop(){
   requestAnimationFrame(loop);
 }
 resize(); player = newPlayer(); bullets = []; ebullets = []; enemies = [];
-loadBest(); loadDex(); loadDiff(); loadNick();
+loadBest(); loadDex(); loadDiff(); loadNick(); loadShip();
 loop();
