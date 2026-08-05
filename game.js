@@ -2752,7 +2752,8 @@ let rankMode = 'normal', rankDiff = 'normal', rankRows = null, rankState = 'idle
 const RMODES = [['normal','表面'],['ura','裏面'],['rush','ラッシュ'],['time','タイム']];
 const RDIFFS = [['easy','かんたん'],['normal','普通'],['hard','むずかしい']];
 const RANKBTN = { x: W/2-72, y: H/2+118, w: 144, h: 28, label:'ランキング登録' };
-function curMode(){ return ura ? 'ura' : mode; }
+function curMode(){ return (mode === 'rush' || mode === 'time') ? mode : (ura ? 'ura' : 'normal'); }
+function stageLabel(m, st){ st = st || 0; return m === 'ura' ? ('裏' + st + '面') : (st + '面'); }
 function modeJP(m){ for(const x of RMODES) if(x[0]===m) return x[1]; return m; }
 function rankModeRect(i){ return { x: 8 + i*88, y: 38, w: 84, h: 22 }; }
 function rankDiffRect(i){ return { x: 8 + i*116, y: 66, w: 108, h: 22 }; }
@@ -2814,7 +2815,10 @@ function drawRank(){
       ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('まだ記録がありません。1位を狙おう！', W/2, H/2);
     } else {
-      const isUra = rankMode === 'ura';
+      // 列見出し
+      ctx.fillStyle = 'rgba(237,228,211,.45)'; ctx.font = '9px system-ui,sans-serif'; ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';  ctx.fillText('名前', 40, top - 12);
+      ctx.textAlign = 'right'; ctx.fillText('到達', W-84, top - 12); ctx.fillText('スコア', W-14, top - 12);
       for(let i=0;i<rankRows.length;i++){
         const r = rankRows[i], y = top + i*rowH;
         const rk = i+1, mine = r.name === nick;
@@ -2825,9 +2829,12 @@ function drawRank(){
         ctx.textAlign = 'right'; ctx.fillText(rk, 30, y + rowH/2);
         ctx.fillStyle = mine ? '#ffd23f' : '#ede4d3'; ctx.font = '13px "Yu Mincho",serif';
         ctx.textAlign = 'left'; ctx.fillText(String(r.name||'').slice(0,10), 40, y + rowH/2);
+        // 到達面
+        ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '11px system-ui,sans-serif';
+        ctx.textAlign = 'right'; ctx.fillText(stageLabel(rankMode, r.stage), W-84, y + rowH/2);
+        // スコア
         ctx.fillStyle = '#d8b45c'; ctx.font = '12px system-ui,sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText((r.score||0).toLocaleString() + (isUra ? '  裏'+(r.stage||0) : ''), W-14, y + rowH/2);
+        ctx.textAlign = 'right'; ctx.fillText((r.score||0).toLocaleString(), W-14, y + rowH/2);
       }
     }
   }
@@ -3163,7 +3170,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v98", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v99", 5, 9);
   ctx.restore();
 }
 
