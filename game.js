@@ -134,7 +134,8 @@ let recoverT = 0, recoverMax = 0, pendingBoss = null;   // ボス前のアイテ
 let player, bullets, ebullets, enemies, bossObj, msg = '', msgTimer = 0;
 let missiles = [];   // ボスの誘導ミサイル
 let minions = [];    // 表ラスボス第三形態の応援＝小型所長×2
-let beams = [];      // 二段撃ちの追加ビーム（色とりどり・時間差）
+let beams = [];      // 二段撃ちの追加ビーム／分身号の多重ビーム
+let bolts = [], boltT = 0;   // 電子申告号：雷の表示
 let barriers = [];   // 防壁（積み上げた書類の壁）＝ステージによって出現。撃つと崩れる
 let bgPhrase = '', bgPhraseT = 0;   // 税務ワードの背景表示（ボス戦以外）
 let midDone = false;   // 中ボスを倒したか
@@ -182,19 +183,19 @@ const STAGE2_TH = 195;                            // 二段撃ち解禁＝ゲー
 
 // ===== 選択できる機体（コード描き分け・全機体使用可） =====
 const SHIPS = [
-  { id:'std',  name:'認印号',    desc:'バランス型。クセがなく扱いやすい', tags:'標準',
+  { id:'std',  name:'認印号',    desc:'バランス型。クセがなく扱いやすい', tags:'標準', sp:'必殺：一括計算ビーム（二段撃ち）',
     body:'#e6d3a0', btn:'#33517f', lcd:'1040',  muzzle:'#c0392b',
     coolMul:1,    dmgAdd:0, dmgMul:1,    chargeMul:1,   livesAdd:0, wings0:0, speedMul:1 },
-  { id:'rapid',name:'速筆号',    desc:'連射がとても速い／1発の威力は控えめ', tags:'連射↑ 威力↓',
+  { id:'rapid',name:'速筆号',    desc:'連射がとても速い／1発の威力は控えめ', tags:'連射↑ 威力↓', sp:'必殺：速筆・乱れ撃ち（弾幕）',
     body:'#dfe7ef', btn:'#2a7de1', lcd:'RAPID', muzzle:'#2a7de1',
     coolMul:0.62, dmgAdd:0, dmgMul:0.85, chargeMul:1,   livesAdd:0, wings0:0, speedMul:1.05 },
-  { id:'power',name:'実印号',    desc:'一撃が重い／連射はゆっくり', tags:'威力↑ 連射↓',
+  { id:'power',name:'実印号',    desc:'一撃が重い／連射はゆっくり', tags:'威力↑ 連射↓', sp:'必殺：実印・大判ドン（極太）',
     body:'#c9a24a', btn:'#7a1f1f', lcd:'JITSU', muzzle:'#7a1f1f',
     coolMul:1.4,  dmgAdd:1, dmgMul:1,    chargeMul:1,   livesAdd:0, wings0:0, speedMul:0.95 },
-  { id:'etax', name:'電子申告号', desc:'必殺の溜めが速い／ライフ-1', tags:'溜め↑ ライフ-1',
+  { id:'etax', name:'電子申告号', desc:'必殺の溜めが速い／ライフ-1', tags:'溜め↑ ライフ-1', sp:'必殺：電子送信（追尾の雷）',
     body:'#2fb0a0', btn:'#0e3b36', lcd:'e-Tax', muzzle:'#39c8c0',
     coolMul:1,    dmgAdd:0, dmgMul:1,    chargeMul:1.55,livesAdd:-1,wings0:0, speedMul:1 },
-  { id:'wing', name:'分身号',    desc:'僚機1機で開始／弾はやや弱い', tags:'僚機+1 威力↓',
+  { id:'wing', name:'分身号',    desc:'僚機1機で開始／弾はやや弱い', tags:'僚機+1 威力↓', sp:'必殺：分身・多重ビーム',
     body:'#d8b0e0', btn:'#5a2d7a', lcd:'BUN',  muzzle:'#8e44ad',
     coolMul:1,    dmgAdd:0, dmgMul:0.9,  chargeMul:1,   livesAdd:0, wings0:1, speedMul:1 }
 ];
@@ -783,7 +784,7 @@ function reset(){
   mode = 'normal'; taT = 0; ally = 0; allyN = 0; corpT = 0; bigT = 0; kcutT = 0; cutinT = 0;
   recoverT = 0; pendingBoss = null;
   bgPhraseT = 0; bgPhrase = pickPhrase();
-  player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; beams = []; bossObj = null;
+  player = newPlayer(); bullets = []; ebullets = []; missiles = []; minions = []; beams = []; bolts = []; boltT = 0; bossObj = null;
   makeWave(1); state = 'play'; setMsg('第一面　' + STAGE_NAMES[1], 90);
   bgmSet('normal', true);   // ゲーム開始（タップ／キー操作）と同時にBGM開始＝自動再生規制を回避
 }
@@ -1113,7 +1114,73 @@ function updateItems(){
 function release(){
   const p = charge; charge = 0;
   if(p < 20){ beep(140, .12, 'sine', .03); return; }   // 貯めが足りないと不発
-  fireBeam(p, 1);   // 第一段（フル溜めなら二段目へ連発）
+  const id = ship().id;
+  if(id === 'rapid')      specialRapid(p);
+  else if(id === 'power') specialPower(p);
+  else if(id === 'etax')  specialEtax(p);
+  else if(id === 'wing')  specialWing(p);
+  else                    fireBeam(p, 1);   // 認印号＝一括計算ビーム（二段撃ち）
+}
+// 速筆号：無数の高速弾を扇状にばらまく「乱れ撃ち」
+function specialRapid(p){
+  const big = p >= STAGE2_TH;
+  ebullets = ebullets.filter(b => b.y < 40); missiles = missiles.filter(m => m.y < 40);
+  flash = big ? 12 : 8; shake = big ? 12 : 8;
+  setMsg(big ? '速筆・千本ノック！' : '速筆・乱れ撃ち', 40);
+  const rows = big ? 4 : 2, n = 15;
+  for(let r=0;r<rows;r++) for(let i=0;i<n;i++){
+    const off = i - (n-1)/2;
+    bullets.push({ x: player.x, y: player.y - 12 - r*9, w: 4, h: 13, vx: off*0.85, dmg: 2, ink: true });
+  }
+  addBurst(player.x, player.y - 20, '#dfe7ef', 14);
+  beep(1046,.05,'square',.05); beep(1320,.05,'square',.04); beep(1600,.05,'square',.03);
+}
+// 実印号：画面を薙ぐ特大の判子ビーム「大判ドン」
+function specialPower(p){
+  const pw = Math.min(100, p), big = p >= STAGE2_TH;
+  const life = Math.round((30 + pw*.28) * (big ? 1.2 : 1));
+  beam = { x: player.x, w: Math.min(W-16, (90 + pw*1.7) * (big ? 1.25 : 1)),
+           power: pw * (big ? 3.0 : 2.2), life: life, maxlife: life, acc: 0, stage: 1, second: false, stamp: true };
+  ebullets = []; missiles = [];
+  flash = 18; shake = 24; setMsg(big ? '実印・特大判ドン！！' : '実印・大判ドン！', 44);
+  addBurst(player.x, player.y - 30, '#c9a24a', 22); addBurst(player.x, 60, '#7a1f1f', 16);
+  beep(120,.5,'sawtooth',.07); beep(80,.6,'square',.05); beep(200,.4,'triangle',.05);
+}
+// 電子申告号：敵を自動で撃つ雷「電子送信」
+function specialEtax(p){
+  const big = p >= STAGE2_TH, n = big ? 14 : 8, dmg = 3 + Math.floor(p/25);
+  ebullets = []; missiles = []; flash = 12; shake = 10;
+  setMsg(big ? '電子送信・一斉更正！' : '電子送信・電光', 40);
+  bolts = [];
+  if(bossObj){
+    for(let i=0;i<n;i++){ bossObj.hp -= dmg; bolts.push({ x: bossObj.x + (Math.random()*40-20), y: bossObj.y + (Math.random()*30-15) }); }
+    bossObj.hurt = 6; score += n*3;
+    if(bossObj.hp <= 0 && state === 'play') bossDefeatDispatch();
+  } else {
+    const live = enemies.filter(e => e.alive);
+    for(let i=0;i<n && live.length; i++){
+      const e = live[Math.floor(Math.random()*live.length)];
+      e.hp -= dmg; e.hurt = 4;
+      if(e.hp <= 0){ e.alive = false; award(e.pt, e.x, e.y); addBurst(e.x, e.y, '#39c8c0', 8); }
+      bolts.push({ x: e.x, y: e.y });
+    }
+  }
+  boltT = 16;
+  beep(1500,.06,'sawtooth',.05); beep(2000,.05,'square',.04); beep(2600,.05,'sine',.03);
+}
+// 分身号：複数の位置から一斉にビーム「多重ビーム」
+function specialWing(p){
+  const pw = Math.min(100, p), big = p >= STAGE2_TH, cnt = big ? 6 : 4;
+  ebullets = []; missiles = []; flash = 12; shake = 12;
+  setMsg(big ? '分身・八連ビーム！' : '分身・多重ビーム', 40);
+  const cols = ['#d8b0e0','#b06ff0','#8e44ad','#c9a2e8','#a05fd0','#e0c0f0'];
+  for(let i=0;i<cnt;i++){
+    const off = (i - (cnt-1)/2) * 42, life = 30 + Math.floor(pw*.18);
+    beams.push({ x: Math.max(16, Math.min(W-16, player.x + off)), w: 24, life: life, maxlife: life,
+                 col: cols[i % cols.length], delay: i*3, style: i%3, tilt: 0 });
+  }
+  addBurst(player.x, player.y - 20, '#d8b0e0', 16);
+  beep(660,.1,'triangle',.05); beep(990,.1,'triangle',.05); beep(1320,.12,'sine',.05);
 }
 // 必殺ビーム発射（stage 1＝通常／stage 2＝真・一括計算）
 function fireBeam(p, stage){
@@ -1237,6 +1304,7 @@ function update(){
   frame++;
   if(msgTimer > 0) msgTimer--;
   if(bigT > 0) bigT--;
+  if(boltT > 0) boltT--;
   if(shake > 0) shake--;
   if(flash > 0) flash--;
   if(state !== 'play') return;
@@ -2484,6 +2552,7 @@ function drawNoseBeam(b){
 
 function drawBeam(){
   const b = beam, half = b.w/2, k = b.life / b.maxlife, bot = player.y - 10;
+  if(b.stamp){ drawBeamStamp(b, half, k, bot); return; }          // 実印号の大判ドン
   if(b.stage === 2){ drawBeamStage2(b, half, k, bot); return; }   // 二段目は別種のビーム
   ctx.save();
   ctx.globalAlpha = .2 + .6*k;
@@ -2499,6 +2568,49 @@ function drawBeam(){
   for(let i=0;i<3;i++){
     const y = bot - ((t*1.5 + i*.34) % 1) * bot;
     ctx.beginPath(); ctx.arc(b.x, y, half*.8, 0, Math.PI*2); ctx.stroke();
+  }
+  ctx.restore();
+}
+// 実印号：巨大な朱の判子ビーム＋落ちてくる「印」
+function drawBeamStamp(b, half, k, bot){
+  const t = b.maxlife - b.life;
+  ctx.save();
+  ctx.globalAlpha = .3 + .55*k;
+  const g = ctx.createLinearGradient(b.x-half, 0, b.x+half, 0);
+  g.addColorStop(0, 'rgba(122,31,31,0)'); g.addColorStop(.5, 'rgba(192,57,43,.95)'); g.addColorStop(1, 'rgba(122,31,31,0)');
+  ctx.fillStyle = g; ctx.fillRect(b.x-half, 0, b.w, bot);
+  // 中央の白熱
+  ctx.globalAlpha = .5*k; ctx.fillStyle = '#fff2c0'; ctx.fillRect(b.x-half*.2, 0, half*.4, bot);
+  // 落ちてくる巨大な「印」ハンコ
+  ctx.globalAlpha = k;
+  for(let i=0;i<3;i++){
+    const y = ((t*8 + i*bot/3) % bot), r = 18;
+    ctx.strokeStyle = '#7a1f1f'; ctx.lineWidth = 3; ctx.strokeRect(b.x-r, y-r, r*2, r*2);
+    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(b.x, y, r-3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 20px "Yu Mincho",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('印', b.x, y+1);
+  }
+  ctx.restore();
+}
+// 電子申告号：雷（自機から各ターゲットへ）
+function drawBolts(){
+  if(boltT <= 0 || !bolts.length) return;
+  const a = boltT / 16;
+  ctx.save();
+  ctx.globalAlpha = a; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  for(const b of bolts){
+    ctx.strokeStyle = (Math.floor(frame/2)%2) ? '#aef4ff' : '#39c8c0';
+    ctx.beginPath();
+    let x = player.x, y = player.y - 10; ctx.moveTo(x, y);
+    const steps = 5;
+    for(let i=1;i<=steps;i++){
+      const tt = i/steps;
+      const nx = player.x + (b.x - player.x)*tt + (Math.random()*16-8)*(1-tt);
+      const ny = (player.y-10) + (b.y - (player.y-10))*tt + (Math.random()*16-8);
+      ctx.lineTo(nx, ny);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#eaffff'; ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI*2); ctx.fill();
   }
   ctx.restore();
 }
@@ -2948,13 +3060,16 @@ function drawSelect(){
     // 名前
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillStyle = sh.body; ctx.font = 'bold 16px "Yu Mincho",serif';
-    ctx.fillText(sh.name, r.x + 80, r.y + 22);
+    ctx.fillText(sh.name, r.x + 78, r.y + 18);
     // 性能タグ
     ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 11px system-ui,sans-serif';
-    ctx.fillText(sh.tags, r.x + 80, r.y + 45);
+    ctx.fillText(sh.tags, r.x + 78, r.y + 39);
     // 説明
-    ctx.fillStyle = 'rgba(237,228,211,.75)'; ctx.font = '11px "Yu Mincho",serif';
-    ctx.fillText(sh.desc, r.x + 80, r.y + 68);
+    ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '10px "Yu Mincho",serif';
+    ctx.fillText(sh.desc, r.x + 78, r.y + 57);
+    // 必殺技
+    ctx.fillStyle = '#7fd0e6'; ctx.font = '10px "Yu Mincho",serif';
+    ctx.fillText(sh.sp, r.x + 78, r.y + 75);
     if(sel){ ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 10px system-ui,sans-serif';
       ctx.textAlign = 'right'; ctx.fillText('★選択中', r.x + r.w - 8, r.y + 15); }
   }
@@ -3126,6 +3241,7 @@ function draw(){
     drawMissiles();
     items.forEach(drawItem);
     if(beams.length) drawExtraBeams();
+    if(boltT > 0) drawBolts();
     if(beam) drawBeam();
     drawPlayer();
     if(player.shield && !(player.inv > 0 && Math.floor(player.inv/5) % 2)){
@@ -3283,7 +3399,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v102", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v103", 5, 9);
   ctx.restore();
 }
 
