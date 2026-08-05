@@ -195,12 +195,13 @@ const SHIPS = [
   { id:'etax', name:'電子申告号', desc:'必殺の溜めが速い／ライフ-1', tags:'溜め↑ ライフ-1', sp:'必殺：電子送信（追尾の雷）',
     body:'#2fb0a0', btn:'#0e3b36', lcd:'e-Tax', muzzle:'#39c8c0',
     coolMul:1,    dmgAdd:0, dmgMul:1,    chargeMul:1.55,livesAdd:-1,wings0:0, speedMul:1 },
-  { id:'wing', name:'分身号',    desc:'僚機1機で開始／弾はやや弱い', tags:'僚機+1 威力↓', sp:'必殺：分身・多重ビーム',
+  { id:'wing', name:'分身号',    desc:'僚機が常に他機より1機多い（最大3機）', tags:'僚機 常時+1', sp:'必殺：分身・多重ビーム',
     body:'#d8b0e0', btn:'#5a2d7a', lcd:'BUN',  muzzle:'#8e44ad',
-    coolMul:1,    dmgAdd:0, dmgMul:0.9,  chargeMul:1,   livesAdd:0, wings0:1, speedMul:1 }
+    coolMul:1,    dmgAdd:0, dmgMul:1,    chargeMul:1,   livesAdd:0, wings0:1, speedMul:1, wingBonus:1 }
 ];
 let shipId = 0;
 function ship(){ return SHIPS[shipId] || SHIPS[0]; }
+function wingCap(){ return MAX_WINGS + (ship().wingBonus || 0); }   // 分身号は+1（最大3機）
 function loadShip(){ try{ const s = +localStorage.getItem('shorui_ship'); if(s>=0 && s<SHIPS.length) shipId = s; }catch(e){} }
 function setShip(i){ shipId = i; try{ localStorage.setItem('shorui_ship', i); }catch(e){} }
 function newPlayer(){
@@ -1052,7 +1053,7 @@ function maybeDrop(x, y, rate){
   // 回復薬は満タン時は出さない。分身は最大時は出さない。
   const w = [15, 13, 12, 11,
              lives < MAX_LIVES ? 8 : 0,
-             player.wings < MAX_WINGS ? 11 : 0,
+             player.wings < wingCap() ? 11 : 0,
              9, 9, 2];   // 税理士はレア（たまにしか出ない）
   const total = w.reduce((a, b) => a + b, 0);
   let r = Math.random()*total, i = 0;
@@ -1082,7 +1083,7 @@ function pickUp(it){
     return;
   }
   else if(d.k === 'bunshin'){
-    if(player.wings < MAX_WINGS){ player.wings++; setMsg('分身　僚機＋1', 28); }
+    if(player.wings < wingCap()){ player.wings++; setMsg('分身　僚機＋1', 28); }
     else { score += 150; setMsg('分身　最大（＋150）', 28); }
   }
   beep(700, .08, 'triangle', .05); beep(1050, .1, 'triangle', .04);
@@ -3399,7 +3400,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v103", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v104", 5, 9);
   ctx.restore();
 }
 
