@@ -2135,22 +2135,58 @@ function drawZako(e){
 // 自機＝電卓
 function drawSealShip(x, y, scale, alpha, sh){
   sh = sh || ship();
+  const PI2 = Math.PI*2;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(x, y); ctx.scale(scale, scale);
-  // 砲口（弾の出口）
-  ctx.fillStyle = sh.muzzle; ctx.fillRect(-2, -15, 4, 5);
-  // 電卓本体
-  ctx.fillStyle = sh.body; ctx.fillRect(-13, -11, 26, 21);
-  ctx.strokeStyle = '#8a6a1f'; ctx.lineWidth = 1; ctx.strokeRect(-12.5, -10.5, 25, 20);
-  // 液晶
-  ctx.fillStyle = '#16233f'; ctx.fillRect(-10.5, -8.5, 21, 6);
-  ctx.fillStyle = '#7fe6a0'; ctx.font = 'bold 6px "Courier New",monospace';
-  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  ctx.fillText(sh.lcd || '1040', 9, -5.2);
-  // ボタン（2行×4列）
-  ctx.fillStyle = sh.btn;
-  for(let r=0;r<2;r++) for(let c=0;c<4;c++){ ctx.fillRect(-10.5 + c*5.4, -0.3 + r*4.7, 3.8, 3.3); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if(sh.id === 'rapid'){
+    // 速筆号：細身のダート＋筆先＋スピードフィン
+    ctx.fillStyle = sh.btn;
+    ctx.beginPath(); ctx.moveTo(-7,4); ctx.lineTo(-12,10); ctx.lineTo(-6,9); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(7,4); ctx.lineTo(12,10); ctx.lineTo(6,9); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = sh.body;
+    ctx.beginPath(); ctx.moveTo(0,-14); ctx.lineTo(7,4); ctx.lineTo(4,10); ctx.lineTo(-4,10); ctx.lineTo(-7,4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#16233f'; ctx.fillRect(-2.5,-13,5,6);   // 筆先
+    ctx.fillStyle = sh.btn; ctx.fillRect(-3,-3,6,8);         // コクピット
+    ctx.fillStyle = sh.muzzle; ctx.fillRect(-1.5,-15,3,3);
+  } else if(sh.id === 'power'){
+    // 実印号：ずんぐりした丸い印鑑
+    ctx.fillStyle = sh.btn; ctx.fillRect(-3.5,-16,7,7);       // 持ち手
+    ctx.fillStyle = sh.body; ctx.beginPath(); ctx.arc(0,0,12,0,PI2); ctx.fill();
+    ctx.strokeStyle = '#6a4f18'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0,0,12,0,PI2); ctx.stroke();
+    ctx.fillStyle = sh.muzzle; ctx.beginPath(); ctx.arc(0,2,7,0,PI2); ctx.fill();   // 朱の印面
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 8px "Yu Mincho",serif'; ctx.fillText('印',0,2.5);
+  } else if(sh.id === 'etax'){
+    // 電子申告号：タブレット型（アンテナ＋スラスター）
+    ctx.strokeStyle = sh.btn; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(0,-16); ctx.lineTo(0,-11); ctx.stroke();
+    ctx.fillStyle = sh.muzzle; ctx.beginPath(); ctx.arc(0,-16,1.8,0,PI2); ctx.fill();
+    ctx.fillStyle = sh.btn; ctx.fillRect(-13,3,3,7); ctx.fillRect(10,3,3,7);        // スラスター
+    ctx.fillStyle = sh.body; ctx.fillRect(-11,-11,22,20);
+    ctx.strokeStyle = '#0e3b36'; ctx.lineWidth = 1; ctx.strokeRect(-10.5,-10.5,21,19);
+    ctx.fillStyle = '#0e2a2a'; ctx.fillRect(-8,-8,16,12);                            // 画面
+    ctx.fillStyle = '#39c8c0'; ctx.font = 'bold 6px "Courier New",monospace'; ctx.fillText('e-Tax',0,-2);
+  } else if(sh.id === 'wing'){
+    // 分身号：中央機＋左右の子機（僚機モチーフ）
+    for(const s of [-1,1]){
+      ctx.fillStyle = sh.body; ctx.fillRect(s*11-3,-3,6,11);
+      ctx.fillStyle = sh.muzzle; ctx.fillRect(s*11-1,-6,2,3);
+    }
+    ctx.fillStyle = sh.muzzle; ctx.fillRect(-1.5,-15,3,5);
+    ctx.fillStyle = sh.body; ctx.fillRect(-6,-11,12,19);
+    ctx.strokeStyle = '#4a2569'; ctx.lineWidth = 1; ctx.strokeRect(-5.5,-10.5,11,18);
+    ctx.fillStyle = sh.btn; ctx.fillRect(-4,-7,8,7);
+  } else {
+    // 認印号（標準）：電卓
+    ctx.fillStyle = sh.muzzle; ctx.fillRect(-2,-15,4,5);
+    ctx.fillStyle = sh.body; ctx.fillRect(-13,-11,26,21);
+    ctx.strokeStyle = '#8a6a1f'; ctx.lineWidth = 1; ctx.strokeRect(-12.5,-10.5,25,20);
+    ctx.fillStyle = '#16233f'; ctx.fillRect(-10.5,-8.5,21,6);
+    ctx.fillStyle = '#7fe6a0'; ctx.font = 'bold 6px "Courier New",monospace';
+    ctx.textAlign = 'right'; ctx.fillText(sh.lcd || '1040', 9, -5.2);
+    ctx.fillStyle = sh.btn;
+    for(let r=0;r<2;r++) for(let c=0;c<4;c++){ ctx.fillRect(-10.5 + c*5.4, -0.3 + r*4.7, 3.8, 3.3); }
+  }
   ctx.restore();
 }
 // 虹色グラデーション（tでゆっくり流れる）。x0→x1の横帯に7色を巡回配置
@@ -3247,7 +3283,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v101", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v102", 5, 9);
   ctx.restore();
 }
 
