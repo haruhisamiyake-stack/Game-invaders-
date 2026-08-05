@@ -18,7 +18,7 @@
 <meta name="robots" content="noindex">
 -->
 <title>書類インベーダー — 税理士法人アストラスト</title>
-<link rel="stylesheet" href="style.css?v=97">
+<link rel="stylesheet" href="style.css?v=98">
 </head>
 <body>
 <header>
@@ -29,6 +29,38 @@
 <div id="wrap"><canvas id="cv"></canvas></div>
 <div class="hint">スマホ：なぞって移動（自動発射）／「必殺」を長押しして離す<br>PC：← → 移動・スペース発射・Shift（またはZ）長押しで必殺</div>
 
-<script src="game.js?v=97"></script>
+<!-- 全国ランキング（Firebase Firestore）。Firestoreを有効化すると自動で作動します -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+  var cfg = {
+    apiKey: "AIzaSyAt4ehy8cTsQxn4-1CW5g4t8mBYcbw0nOA",
+    authDomain: "hp-astrust.firebaseapp.com",
+    projectId: "hp-astrust",
+    storageBucket: "hp-astrust.firebasestorage.app",
+    messagingSenderId: "457192854208",
+    appId: "1:457192854208:web:54480d789d8c78fa325325"
+  };
+  var db = null;
+  try { firebase.initializeApp(cfg); db = firebase.firestore(); } catch(e){ db = null; }
+  function boardKey(mode, diff){ return (mode||'normal') + '_' + (diff||'normal'); }
+  window.Ranking = {
+    ready: function(){ return !!db; },
+    submit: function(entry){
+      if(!db) return Promise.reject(new Error('nodb'));
+      return db.collection('boards').doc(boardKey(entry.mode, entry.diff))
+               .collection('scores').add(entry);
+    },
+    top: function(mode, diff, n){
+      if(!db) return Promise.reject(new Error('nodb'));
+      return db.collection('boards').doc(boardKey(mode, diff))
+               .collection('scores').orderBy('score','desc').limit(n||20).get()
+               .then(function(q){ return q.docs.map(function(d){ return d.data(); }); });
+    }
+  };
+})();
+</script>
+<script src="game.js?v=98"></script>
 </body>
 </html>

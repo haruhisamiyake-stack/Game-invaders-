@@ -172,8 +172,9 @@ const TBTN = {   // タイトルのサブメニュー（モード＋図鑑）
   rush: { x: W/2-118, y: 356, w: 76, h: 26, label:'ボスラッシュ' },
   time: { x: W/2-38,  y: 356, w: 76, h: 26, label:'タイムアタック' },
   ura:  { x: W/2+42,  y: 356, w: 76, h: 26, label:'裏面モード' },
-  dex:  { x: W/2-80,  y: 390, w: 76, h: 26, label:'ランク図鑑' },
-  item: { x: W/2+4,   y: 390, w: 76, h: 26, label:'アイテム図鑑' }
+  rank: { x: W/2-118, y: 390, w: 76, h: 26, label:'ランキング' },
+  dex:  { x: W/2-38,  y: 390, w: 76, h: 26, label:'ランク図鑑' },
+  item: { x: W/2+42,  y: 390, w: 76, h: 26, label:'アイテム図鑑' }
 };
 const EBULLET_SPEED = 1.5;                        // 敵弾（球）の速度倍率
 const CHARGE_MAX = 200;                           // 溜めの最大（ゲージ二周ぶん）
@@ -898,7 +899,7 @@ addEventListener('keydown', e=>{
   unlockAudio();
   if(e.code === 'KeyP' || e.code === 'Escape'){ togglePause(); e.preventDefault(); return; }
   if(paused) return;   // 停止中は他の入力を無視
-  if(state === 'dex' || state === 'itemhelp'){ state = 'title'; return; }
+  if(state === 'dex' || state === 'itemhelp' || state === 'rank'){ state = 'title'; return; }
   if(state === 'title' && e.code === 'KeyG'){ state = 'dex'; return; }
   keys[e.code] = true;
   if(['ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
@@ -945,6 +946,7 @@ cv.addEventListener('pointerdown', e=>{
   if(paused){ togglePause(); return; }      // 停止中は画面タップで再開
   if(state === 'uraAsk'){ handleUraAsk(p); return; }   // 裏面 突入 Yes/No
   if(state === 'dex' || state === 'itemhelp'){ state = 'title'; return; }
+  if(state === 'rank'){ handleRankTap(p); return; }
   if(state === 'title'){
     if(inRect(p, DBTN.easy)){ setDifficulty('easy'); return; }     // 難易度選択（開始しない）
     if(inRect(p, DBTN.normal)){ setDifficulty('normal'); return; }
@@ -952,9 +954,14 @@ cv.addEventListener('pointerdown', e=>{
     if(inRect(p, TBTN.rush)){ startRush(); return; }
     if(inRect(p, TBTN.time)){ startTime(); return; }
     if(inRect(p, TBTN.ura)){ startUraMode(); return; }
+    if(inRect(p, TBTN.rank)){ openRank(rankMode, diff); return; }
     if(inRect(p, TBTN.dex)){ state = 'dex'; return; }
     if(inRect(p, TBTN.item)){ state = 'itemhelp'; return; }
     reset(); return;                         // それ以外は通常開始
+  }
+  if(state === 'over' || state === 'win'){
+    if(inRect(p, RANKBTN)){ registerScore(); return; }
+    reset(); return;
   }
   if(state !== 'play'){ tap(); return; }
   if(inBtn(p) && chargePtr === null){ chargePtr = e.pointerId; return; }
@@ -2737,6 +2744,106 @@ function drawDex(){
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('タップ / キーで戻る', W/2, H - 6);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
+
+/* ===================== 全国ランキング ===================== */
+let nick = '';
+function loadNick(){ try{ nick = localStorage.getItem('shorui_nick') || ''; }catch(e){} }
+let rankMode = 'normal', rankDiff = 'normal', rankRows = null, rankState = 'idle', rankErr = '';
+const RMODES = [['normal','表面'],['ura','裏面'],['rush','ラッシュ'],['time','タイム']];
+const RDIFFS = [['easy','かんたん'],['normal','普通'],['hard','むずかしい']];
+const RANKBTN = { x: W/2-72, y: H/2+118, w: 144, h: 28, label:'ランキング登録' };
+function curMode(){ return ura ? 'ura' : mode; }
+function modeJP(m){ for(const x of RMODES) if(x[0]===m) return x[1]; return m; }
+function rankModeRect(i){ return { x: 8 + i*88, y: 38, w: 84, h: 22 }; }
+function rankDiffRect(i){ return { x: 8 + i*116, y: 66, w: 108, h: 22 }; }
+function openRank(m, d){
+  rankMode = m; rankDiff = d; rankRows = null; rankErr = ''; rankState = 'loading'; state = 'rank';
+  if(window.Ranking && window.Ranking.ready()){
+    window.Ranking.top(m, d, 20)
+      .then(function(rows){ if(rankMode===m && rankDiff===d){ rankRows = rows; rankState = 'done'; } })
+      .catch(function(){ if(rankMode===m && rankDiff===d){ rankState = 'error'; rankErr = '接続エラー'; } });
+  } else { rankState = 'error'; rankErr = 'ランキング準備中（Firestore未有効）'; }
+}
+function sanitizeNick(s){
+  s = (s||'').replace(/[\x00-\x1f]/g,'').trim().slice(0,10);
+  const ng = ['fuck','shit','sex','ばか','馬鹿','あほ','アホ','死ね','殺'];
+  const low = s.toLowerCase();
+  for(const w of ng){ if(low.indexOf(w) >= 0) return ''; }
+  return s;
+}
+function registerScore(){
+  if(!(window.Ranking && window.Ranking.ready())){ openRank(curMode(), diff); return; }
+  const input = prompt('ニックネームを入力（10文字まで）', nick || '');
+  if(input === null) return;
+  const name = sanitizeNick(input);
+  if(!name){ setMsg('その名前は登録できません', 60); return; }
+  nick = name; try{ localStorage.setItem('shorui_nick', name); }catch(e){}
+  const entry = { name: name, score: score|0, mode: curMode(), diff: diff,
+                  stage: (ura ? uraStage : wave)|0, ts: Date.now() };
+  window.Ranking.submit(entry)
+    .then(function(){ openRank(entry.mode, entry.diff); })
+    .catch(function(){ setMsg('登録に失敗しました', 60); });
+}
+function handleRankTap(p){
+  for(let i=0;i<RMODES.length;i++){ if(inRect(p, rankModeRect(i))){ openRank(RMODES[i][0], rankDiff); return; } }
+  for(let i=0;i<RDIFFS.length;i++){ if(inRect(p, rankDiffRect(i))){ openRank(rankMode, RDIFFS[i][0]); return; } }
+  state = 'title';
+}
+function rankTab(r, label, sel){
+  ctx.fillStyle = sel ? '#d8b45c' : 'rgba(14,23,48,.9)'; ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = sel ? '#fff' : '#d8b45c'; ctx.lineWidth = sel ? 1.5 : 1; ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+  ctx.fillStyle = sel ? '#16233f' : '#ede4d3'; ctx.font = (sel?'bold ':'') + '10px "Yu Mincho",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, r.x + r.w/2, r.y + r.h/2);
+}
+function drawRank(){
+  ctx.fillStyle = 'rgba(14,23,48,.96)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#d8b45c'; ctx.font = 'bold 15px "Yu Mincho",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText('全国ランキング', W/2, 12);
+  for(let i=0;i<RMODES.length;i++) rankTab(rankModeRect(i), RMODES[i][1], RMODES[i][0]===rankMode);
+  for(let i=0;i<RDIFFS.length;i++) rankTab(rankDiffRect(i), RDIFFS[i][1], RDIFFS[i][0]===rankDiff);
+  const top = 100, rowH = 26;
+  ctx.textBaseline = 'middle';
+  if(rankState === 'loading'){
+    ctx.fillStyle = 'rgba(237,228,211,.8)'; ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('読み込み中…', W/2, H/2);
+  } else if(rankState === 'error'){
+    ctx.fillStyle = '#e0b83a'; ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(rankErr, W/2, H/2);
+  } else if(rankRows){
+    if(!rankRows.length){
+      ctx.fillStyle = 'rgba(237,228,211,.7)'; ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('まだ記録がありません。1位を狙おう！', W/2, H/2);
+    } else {
+      const isUra = rankMode === 'ura';
+      for(let i=0;i<rankRows.length;i++){
+        const r = rankRows[i], y = top + i*rowH;
+        const rk = i+1, mine = r.name === nick;
+        ctx.fillStyle = mine ? 'rgba(216,180,92,.18)' : (i%2 ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,0)');
+        ctx.fillRect(8, y-1, W-16, rowH-2);
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = rk<=3 ? '#ffd23f' : 'rgba(237,228,211,.6)'; ctx.font = 'bold 12px system-ui,sans-serif';
+        ctx.textAlign = 'right'; ctx.fillText(rk, 30, y + rowH/2);
+        ctx.fillStyle = mine ? '#ffd23f' : '#ede4d3'; ctx.font = '13px "Yu Mincho",serif';
+        ctx.textAlign = 'left'; ctx.fillText(String(r.name||'').slice(0,10), 40, y + rowH/2);
+        ctx.fillStyle = '#d8b45c'; ctx.font = '12px system-ui,sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText((r.score||0).toLocaleString() + (isUra ? '  裏'+(r.stage||0) : ''), W-14, y + rowH/2);
+      }
+    }
+  }
+  ctx.fillStyle = 'rgba(237,228,211,.8)'; ctx.font = '10px system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('タブで切替 ／ 画面下タップで戻る', W/2, H - 6);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+function drawResultRankBtn(){
+  const r = RANKBTN;
+  ctx.fillStyle = 'rgba(60,40,10,.9)'; ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 1.5; ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+  ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 13px "Yu Mincho",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('▶ ランキング登録', r.x + r.w/2, r.y + r.h/2);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
 // アイテムの効果説明（ITEMS の並び順）
 const ITEM_HELP = [
   '弾数アップ（3発→5発）／約15秒',
@@ -3017,6 +3124,7 @@ function draw(){
     L.push({t:'タップでもう一度', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'});
     center(L);
     drawBestLine();
+    drawResultRankBtn();
   } else if(state === 'uraAsk'){
     center([
       {t:'所長 撃破！', s:24, c:'#d8b45c', gap:28},
@@ -3044,15 +3152,18 @@ function draw(){
       {t:'タップで再挑戦', s:12, f:'system-ui,sans-serif', c:'rgba(237,228,211,.8)'}
     ]);
     drawBestLine();
+    drawResultRankBtn();
   } else if(state === 'dex'){
     drawDex();
   } else if(state === 'itemhelp'){
     drawItemHelp();
+  } else if(state === 'rank'){
+    drawRank();
   }
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v97", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v98", 5, 9);
   ctx.restore();
 }
 
@@ -3062,5 +3173,5 @@ function loop(){
   requestAnimationFrame(loop);
 }
 resize(); player = newPlayer(); bullets = []; ebullets = []; enemies = [];
-loadBest(); loadDex(); loadDiff();
+loadBest(); loadDex(); loadDiff(); loadNick();
 loop();
