@@ -3114,7 +3114,7 @@ function draw(){
     drawTitleButtons();
     if(best.score > 0){
       ctx.fillStyle = '#d8b45c'; ctx.font = '10px system-ui,sans-serif';
-      ctx.fillText('ベスト ' + best.score.toLocaleString() + '点' + (best.ura > 0 ? '　/　裏' + best.ura + '面' : ''), W/2, 440);
+      ctx.fillText('自己ベスト ' + best.score.toLocaleString() + '点' + (best.ura > 0 ? '　/　最高到達 裏' + best.ura + '面' : ''), W/2, 440);
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   } else if(state === 'over'){
@@ -3170,7 +3170,7 @@ function draw(){
   drawMute();   // どの画面でも右上に表示（開始前に消音予約も可）
   // ビルド確認用（キャッシュ判別）：左上に小さく表示
   ctx.fillStyle = 'rgba(237,228,211,.28)'; ctx.font = '7px system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v99", 5, 9);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText("v100", 5, 9);
   ctx.restore();
 }
 
